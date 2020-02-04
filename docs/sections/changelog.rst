@@ -18,6 +18,7 @@ Unreleased
 * Fixed: example project on Django 2.1.
 * Fixed: example in docs for translatable scopes (ugettext).
 * Fixed: Authorize page will redirect to login if the user logs out in the middle.
+* Fixed: Protected resource view sets Vary: Authorization (fixes userinfo endpoint)
 * Removed: Support for Python 2.
 
 0.7.0
