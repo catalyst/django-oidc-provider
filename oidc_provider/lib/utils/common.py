@@ -7,10 +7,14 @@ from django.utils.cache import patch_vary_headers
 from oidc_provider import settings
 
 
-if django.VERSION >= (1, 11):
-    from django.urls import reverse
-else:
-    from django.core.urlresolvers import reverse
+try:
+    if django.VERSION >= (1, 11):
+        from django.urls import reverse
+    else:
+        from django.core.urlresolvers import reverse
+except TypeError:
+    # This is thrown when the mocked django library used by sphinx is accessed.
+    pass
 
 
 def redirect(uri):
@@ -140,6 +144,31 @@ def default_introspection_processing_hook(introspection_response, client, id_tok
     :return:
     """
     return introspection_response
+
+
+def default_refresh_token_alive_hook(issued_at, user, id_token, access_has_expired):
+    """
+    :param issued_at: The date and time the token was issued
+    :type issued_at: datetime.datetime
+
+    :param user: The user this token was issued for
+    :type user: DJANGO_AUTH_USER_MODEL
+
+    :param id_token: `The ID Token`_
+    :type id_token: dict
+
+    :param access_has_expired: Whether the associated access token has expired
+    :type access_has_expired: bool
+
+    :return: Whether the refresh token should still be considered 'alive'
+    :rtype: bool
+
+    .. _The ID Token: https://openid.net/specs/openid-connect-core-1_0.html#IDToken
+
+    .. warning::
+        ``issued_at`` may be ``None`` if the token was created prior to version v0.8.0
+    """
+    return True
 
 
 def get_browser_state_or_default(request):

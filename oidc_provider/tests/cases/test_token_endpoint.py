@@ -1,8 +1,10 @@
 import json
 import time
 import uuid
+import random
 
 from base64 import b64encode
+from mock import Mock
 
 try:
     from urllib.parse import urlencode
@@ -34,6 +36,7 @@ from oidc_provider.models import Token
 from oidc_provider.tests.app.utils import (
     create_fake_user,
     create_fake_client,
+    create_fake_token,
     FAKE_CODE_CHALLENGE,
     FAKE_CODE_VERIFIER,
     FAKE_NONCE,
@@ -445,6 +448,36 @@ class TokenTestCase(TestCase):
         del post_data['refresh_token']
         response = self._post_request(post_data)
         self.assertIn('invalid_grant', response.content.decode('utf-8'))
+
+    @override_settings(OIDC_REFRESH_TOKEN_ALIVE_HOOK=Mock(return_value=False))
+    def test_dead_refresh_token(self):
+        """
+        Test that a dead refresh token, as defined by the hook, is rejected with 'invalid_grant'.
+        See https://tools.ietf.org/html/rfc6749#section-5.2
+        """
+
+        token = create_fake_token(self.user, self.SCOPE_LIST, self.client)
+        token.refresh_token = str(random.randint(1, 999999)).zfill(6)
+        token.save()
+
+        post_data = self._refresh_token_post_data(token.refresh_token)
+        response = self._post_request(post_data)
+        self.assertIn('invalid_grant', response.content.decode('utf-8'))
+
+    @override_settings(OIDC_REFRESH_TOKEN_ALIVE_HOOK=Mock(return_value=True))
+    def test_alive_refresh_token(self):
+        """
+        Test that an alive refresh token, as defined by the hook, is accepted.
+        See https://tools.ietf.org/html/rfc6749#section-5.2
+        """
+
+        token = create_fake_token(self.user, self.SCOPE_LIST, self.client)
+        token.refresh_token = str(random.randint(1, 999999)).zfill(6)
+        token.save()
+
+        post_data = self._refresh_token_post_data(token.refresh_token)
+        response = self._post_request(post_data)
+        self.assertIn('access_token', json.loads(response.content.decode('utf-8')))
 
     def test_client_redirect_uri(self):
         """

@@ -1,4 +1,5 @@
 import json
+from mock import Mock
 
 from datetime import timedelta
 try:
@@ -10,8 +11,8 @@ try:
     from django.urls import reverse
 except ImportError:
     from django.core.urlresolvers import reverse
-from django.test import RequestFactory
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
+from django.test.utils import override_settings
 from django.utils import timezone
 
 from oidc_provider.lib.utils.token import (
@@ -96,12 +97,26 @@ class UserInfoTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(bool(response.content), True)
 
-    def test_response_with_expired_token(self):
+    def test_response_with_expired_access_token(self):
         token = self._create_token()
 
         # Make token expired.
-        token.expires_at = timezone.now() - timedelta(hours=1)
+        token.access_expires_at = timezone.now() - timedelta(hours=1)
         token.save()
+
+        response = self._post_request(token.access_token)
+
+        self.assertEqual(response.status_code, 401)
+
+        try:
+            is_header_field_ok = 'invalid_token' in response['WWW-Authenticate']
+        except KeyError:
+            is_header_field_ok = False
+        self.assertEqual(is_header_field_ok, True)
+
+    @override_settings(OIDC_REFRESH_TOKEN_ALIVE_HOOK=Mock(return_value=False))
+    def test_response_with_expired_token(self):
+        token = self._create_token()
 
         response = self._post_request(token.access_token)
 

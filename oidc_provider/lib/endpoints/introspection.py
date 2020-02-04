@@ -42,7 +42,7 @@ class TokenIntrospectionEndpoint(object):
         except Token.DoesNotExist:
             logger.debug('[Introspection] Token does not exist: %s', self.params['token'])
             raise TokenIntrospectionError()
-        if self.token.has_expired():
+        if self.token.access_has_expired() or not self.token.refresh_is_alive():
             logger.debug('[Introspection] Token is not valid: %s', self.params['token'])
             raise TokenIntrospectionError()
 

@@ -223,7 +223,6 @@ class Client(models.Model):
 class BaseCodeTokenModel(models.Model):
 
     client = models.ForeignKey(Client, verbose_name=_(u'Client'), on_delete=models.CASCADE)
-    expires_at = models.DateTimeField(verbose_name=_(u'Expiration Date'))
     _scope = models.TextField(default='', verbose_name=_(u'Scopes'))
 
     class Meta:
@@ -240,9 +239,6 @@ class BaseCodeTokenModel(models.Model):
     def __unicode__(self):
         return self.__str__()
 
-    def has_expired(self):
-        return timezone.now() >= self.expires_at
-
 
 class Code(BaseCodeTokenModel):
 
@@ -254,6 +250,7 @@ class Code(BaseCodeTokenModel):
     code_challenge = models.CharField(max_length=255, null=True, verbose_name=_(u'Code Challenge'))
     code_challenge_method = models.CharField(
         max_length=255, null=True, verbose_name=_(u'Code Challenge Method'))
+    expires_at = models.DateTimeField(verbose_name=_(u'Expiration Date'))
 
     class Meta:
         verbose_name = _(u'Authorization Code')
@@ -262,8 +259,13 @@ class Code(BaseCodeTokenModel):
     def __str__(self):
         return u'{0} - {1}'.format(self.client, self.code)
 
+    def has_expired(self):
+        return timezone.now() >= self.expires_at
+
 
 class Token(BaseCodeTokenModel):
+
+    issued_at = models.DateTimeField(auto_now_add=True, null=True)
 
     user = models.ForeignKey(
         django_settings.AUTH_USER_MODEL,
@@ -271,8 +273,12 @@ class Token(BaseCodeTokenModel):
         verbose_name=_(u'User'),
         on_delete=models.CASCADE
     )
+
     access_token = models.CharField(max_length=255, unique=True, verbose_name=_(u'Access Token'))
+    access_expires_at = models.DateTimeField(verbose_name=_(u'Access Token Expiration Date'))
+
     refresh_token = models.CharField(max_length=255, unique=True, verbose_name=_(u'Refresh Token'))
+
     _id_token = models.TextField(verbose_name=_(u'ID Token'))
 
     class Meta:
@@ -302,12 +308,40 @@ class Token(BaseCodeTokenModel):
             )
         ).rstrip(b'=').decode('ascii')
 
+    def access_has_expired(self):
+        return timezone.now() >= self.access_expires_at
+
+    def refresh_is_alive(self):
+        """
+        Calls a hook to determine whether the refresh token is still valid.
+
+        This is implemented for the refresh token and not the access token
+        because refresh token expiry is not defined by the spec and may be
+        dependant on factors other than time, such as the user's session.
+
+        If this returns false the entire `Token` object is deleted, and the
+        access token will be invalidated.
+        """
+
+        alive = settings.get('OIDC_REFRESH_TOKEN_ALIVE_HOOK', import_str=True)(
+            issued_at=self.issued_at,
+            user=self.user,
+            id_token=self.id_token,
+            access_has_expired=self.access_has_expired()
+        )
+
+        if not alive:
+            self.delete()
+
+        return alive
+
 
 class UserConsent(BaseCodeTokenModel):
 
     user = models.ForeignKey(
         django_settings.AUTH_USER_MODEL, verbose_name=_(u'User'), on_delete=models.CASCADE)
     date_given = models.DateTimeField(verbose_name=_(u'Date Given'))
+    expires_at = models.DateTimeField(verbose_name=_(u'Expiration Date'))
 
     class Meta:
         unique_together = ('user', 'client')

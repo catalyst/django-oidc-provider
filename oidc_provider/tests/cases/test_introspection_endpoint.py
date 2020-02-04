@@ -1,7 +1,7 @@
 import time
 import random
 
-from mock import patch
+from mock import patch, Mock
 try:
     from urllib.parse import urlencode
 except ImportError:
@@ -96,8 +96,14 @@ class IntrospectionTestCase(TestCase):
         response = self._make_request()
         self._assert_inactive(response)
 
-    def test_token_expired_returns_inactive(self):
-        self.token.expires_at = timezone.now() - timezone.timedelta(seconds=60)
+    def test_access_token_expired_returns_inactive(self):
+        self.token.access_expires_at = timezone.now() - timezone.timedelta(seconds=60)
+        self.token.save()
+        response = self._make_request()
+        self._assert_inactive(response)
+
+    @override_settings(OIDC_REFRESH_TOKEN_ALIVE_HOOK=Mock(return_value=False))
+    def test_dead_token_returns_inactive(self):
         self.token.save()
         response = self._make_request()
         self._assert_inactive(response)

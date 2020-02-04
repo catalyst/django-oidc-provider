@@ -272,4 +272,26 @@ It is recommended to set this to ``'filesystem'`` for new applications if possib
 OIDC_RSA_CERT_LOCATION
 ======================
 
-REQUIRED IF `OIDC_RSA_CERT_STORE='filesystem': An absolute path to a writable directory.
+REQUIRED IF ``OIDC_RSA_CERT_STORE='filesystem'``: An absolute path to a writable directory.
+
+OIDC_REFRESH_TOKEN_ALIVE_HOOK
+=============================
+
+OPTIONAL: A string with the location of your function.
+
+This is called to determine whether a given token object is still valid.
+
+Receives the following arguments:
+
+* ``issued_at``: ``datetime.datetime`` The date and time the token was issued. 
+
+* ``user``: ``DJANGO_AUTH_USER_MODEL`` The user this token was issued for.
+
+* ``id_token``: The `ID Token <https://openid.net/specs/openid-connect-core-1_0.html#IDToken>`_.
+
+* ``access_has_expired``: ``bool`` Whether the associated access token has expired.
+
+Returns: ``bool`` Whether the refresh token should still be considered 'alive'.
+
+.. warning::
+    ``issued_at`` may be ``None`` if the token was created prior to version v0.8.0
