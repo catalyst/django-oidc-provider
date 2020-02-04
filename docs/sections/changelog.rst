@@ -10,8 +10,9 @@ Unreleased
 
 * Added: scope on token and introspection endpoints.
 * Added: Support for storing RSA keys in the filesystem instead of the database.
-* Added: CLI command to migrate RSA keys to the filesystem `migratersakeys`.
-* Added: Support for the `claims_supported` field of openid-configuration.
+* Added: CLI command to migrate RSA keys to the filesystem ``migratersakeys``.
+* Added: Support for the ``claims_supported`` field of openid-configuration.
+* Added: ``OIDC_REFRESH_TOKEN_ALIVE_HOOK`` to control when refresh tokens are expired.
 * Added: Client option to require PKCE (RFC 7636). Defaults to on for **new** clients.
 * Changed: Loopback redirect URIs accept any port (RFC8252)
 * Fixed: example project on Django 2.1.

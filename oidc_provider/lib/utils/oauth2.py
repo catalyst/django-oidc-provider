@@ -99,7 +99,7 @@ def protected_resource_view(scopes=None):
                     logger.debug('[UserInfo] Token does not exist: %s', access_token)
                     raise BearerTokenError('invalid_token')
 
-                if kwargs['token'].has_expired():
+                if kwargs['token'].access_has_expired() or not kwargs['token'].refresh_is_alive():
                     logger.debug('[UserInfo] Token has expired: %s', access_token)
                     raise BearerTokenError('invalid_token')
 

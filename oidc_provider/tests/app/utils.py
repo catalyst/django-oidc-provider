@@ -76,7 +76,7 @@ def create_fake_client(response_type, is_public=False, require_consent=True, req
 
 def create_fake_token(user, scopes, client):
     expires_at = timezone.now() + timezone.timedelta(seconds=60)
-    token = Token(user=user, client=client, expires_at=expires_at)
+    token = Token(user=user, client=client, access_expires_at=expires_at)
     token.scope = scopes
 
     token.save()
