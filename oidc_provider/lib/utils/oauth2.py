@@ -1,4 +1,5 @@
 from base64 import b64decode
+from functools import wraps
 import logging
 import re
 
@@ -54,6 +55,28 @@ def extract_client_auth(request):
     return (client_id, client_secret)
 
 
+class _MethodDecoratorAdaptor:
+    def __init__(self, decorator, func):
+        self.decorator = decorator
+        self.func = func
+
+    def __call__(self, *args, **kwargs):
+        return self.decorator(self.func)(*args, **kwargs)
+
+    def __get__(self, instance, owner=None):
+        return self.decorator(self.func.__get__(instance, owner))
+
+
+def method_or_func(decorator):
+    """
+    Allows you to use the same decorator on methods and functions, hiding the self argument from
+    the decorator.
+    """
+    def adapt(func):
+        return _MethodDecoratorAdaptor(decorator, func)
+    return adapt
+
+
 def protected_resource_view(scopes=None):
     """
     View decorator. The client accesses protected resources by presenting the
@@ -63,13 +86,16 @@ def protected_resource_view(scopes=None):
     if scopes is None:
         scopes = []
 
+    @method_or_func
     def wrapper(view):
+        @wraps(view)
         def view_wrapper(request,  *args, **kwargs):
             access_token = extract_access_token(request)
 
             try:
                 try:
                     kwargs['token'] = Token.objects.get(access_token=access_token)
+                    request.user = kwargs['token'].user
                 except Token.DoesNotExist:
                     logger.debug('[UserInfo] Token does not exist: %s', access_token)
                     raise BearerTokenError('invalid_token')

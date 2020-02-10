@@ -15,6 +15,7 @@ Unreleased
 * Added: ``OIDC_REFRESH_TOKEN_ALIVE_HOOK`` to control when refresh tokens are expired.
 * Added: Client option to require PKCE (RFC 7636). Defaults to on for **new** clients.
 * Changed: Loopback redirect URIs accept any port (RFC8252)
+* Changed: Moved check session iframe inline javascript to a separate file
 * Fixed: example project on Django 2.1.
 * Fixed: example in docs for translatable scopes (ugettext).
 * Fixed: Authorize page will redirect to login if the user logs out in the middle.
