@@ -28,6 +28,7 @@ from oidc_provider import settings
 from oidc_provider.tests.app.utils import (
     create_fake_user,
     create_fake_client,
+    create_fake_user_consent,
     FAKE_CODE_CHALLENGE,
     is_code_valid,
 )
@@ -80,6 +81,9 @@ class AuthorizationCodeFlowTestCase(TestCase, AuthorizeEndpointMixin):
             response_type='code', is_public=True, require_pkce=True)
         self.client_private_pkce = create_fake_client(
             response_type='code', is_public=False, require_pkce=True)
+        self.client_reuse_consent = create_fake_client(
+            response_type='code', reuse_consent=True
+        )
         self.state = uuid.uuid4().hex
         self.nonce = uuid.uuid4().hex
 
@@ -370,6 +374,72 @@ class AuthorizationCodeFlowTestCase(TestCase, AuthorizeEndpointMixin):
 
         # An error is returned if the Client does not have pre-configured
         # consent for the requested Claims.
+        self.assertIn('consent_required', response['Location'])
+
+    def test_reuse_consent(self):
+        """
+        Test that a saved consent is reused if the client has reuse_consent=True
+        """
+        data = {
+            'client_id': self.client_reuse_consent.client_id,
+            'response_type': next(self.client_reuse_consent.response_type_values()),
+            'redirect_uri': self.client_reuse_consent.default_redirect_uri,
+            'scope': 'openid email',
+            'state': self.state,
+            'prompt': 'none'
+        }
+
+        create_fake_user_consent(self.user, self.client_reuse_consent, scopes=('openid', 'email'))
+
+        response = self._auth_request('get', data, is_user_authenticated=True)
+
+        self.assertIn('code', response['Location'])
+
+    def test_reuse_consent_expired(self):
+        """
+        Test that a saved consent isn't reused if the consent has expired.
+        """
+        data = {
+            'client_id': self.client_reuse_consent.client_id,
+            'response_type': next(self.client_reuse_consent.response_type_values()),
+            'redirect_uri': self.client_reuse_consent.default_redirect_uri,
+            'scope': 'openid email',
+            'state': self.state,
+            'prompt': 'none'
+        }
+
+        create_fake_user_consent(
+            self.user,
+            self.client_reuse_consent,
+            scopes=('openid', 'email'),
+            expired=True
+        )
+
+        response = self._auth_request('get', data, is_user_authenticated=True)
+
+        self.assertIn('consent_required', response['Location'])
+
+    def test_reuse_consent_fewer_scopes(self):
+        """
+        Test that a saved consent isn't reused if the consent fewer scopes.
+        """
+        data = {
+            'client_id': self.client_reuse_consent.client_id,
+            'response_type': next(self.client_reuse_consent.response_type_values()),
+            'redirect_uri': self.client_reuse_consent.default_redirect_uri,
+            'scope': 'openid email',
+            'state': self.state,
+            'prompt': 'none'
+        }
+
+        create_fake_user_consent(
+            self.user,
+            self.client_reuse_consent,
+            scopes=('openid'),
+        )
+
+        response = self._auth_request('get', data, is_user_authenticated=True)
+
         self.assertIn('consent_required', response['Location'])
 
     @patch('oidc_provider.views.django_user_logout')
