@@ -338,13 +338,16 @@ class Token(BaseCodeTokenModel):
 
 class UserConsent(BaseCodeTokenModel):
 
+    class Meta:
+        unique_together = ('user', 'client')
+
     user = models.ForeignKey(
         django_settings.AUTH_USER_MODEL, verbose_name=_(u'User'), on_delete=models.CASCADE)
     date_given = models.DateTimeField(verbose_name=_(u'Date Given'))
     expires_at = models.DateTimeField(verbose_name=_(u'Expiration Date'))
 
-    class Meta:
-        unique_together = ('user', 'client')
+    def has_expired(self):
+        return timezone.now() >= self.expires_at
 
 
 class RSAKey(models.Model):

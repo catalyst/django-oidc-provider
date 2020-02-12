@@ -1,5 +1,6 @@
 import random
 import string
+from datetime import timedelta
 
 import django
 from django.contrib.auth.backends import ModelBackend
@@ -16,7 +17,8 @@ from oidc_provider.models import (
     Client,
     Code,
     Token,
-    ResponseType)
+    ResponseType,
+    UserConsent)
 
 
 FAKE_NONCE = 'cb584e44c43ed6bd0bc2d9c7e242837d'
@@ -44,7 +46,25 @@ def create_fake_user():
     return user
 
 
-def create_fake_client(response_type, is_public=False, require_consent=True, require_pkce=False):
+def create_fake_user_consent(user, client, scopes=(), expired=False):
+    uc = UserConsent(
+        user=user,
+        client=client,
+        date_given=timezone.now(),
+        expires_at=timezone.now() + timedelta(days=-1 if expired else 1),
+        scope=scopes
+    )
+    uc.save()
+    return uc
+
+
+def create_fake_client(
+    response_type,
+    is_public=False,
+    require_consent=True,
+    require_pkce=False,
+    reuse_consent=False
+):
     """
     Create a test client, response_type argument MUST be:
     'code', 'id_token' or 'id_token token'.
@@ -63,6 +83,7 @@ def create_fake_client(response_type, is_public=False, require_consent=True, req
     client.require_consent = require_consent
     client.scope = ['openid', 'email']
     client.require_pkce = require_pkce
+    client.reuse_consent = reuse_consent
     client.save()
 
     # check if response_type is a string in a python 2 and 3 compatible way
