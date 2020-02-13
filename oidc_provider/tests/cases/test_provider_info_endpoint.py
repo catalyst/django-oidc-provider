@@ -50,6 +50,7 @@ class ProviderInfoTestCase(TestCase):
             'subject_types_supported',
             'token_endpoint_auth_methods_supported',
             'claims_supported',
+            'request_uri_parameter_supported'
         }
 
         request = self.factory.get(self.url)

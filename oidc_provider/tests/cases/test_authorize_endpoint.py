@@ -629,7 +629,8 @@ class AuthorizationCodeFlowTestCase(TestCase, AuthorizeEndpointMixin):
             'prompt': 'consent'
         }
 
-        self._auth_request('get', data, is_user_authenticated=True)
+        response = self._auth_request('get', data, is_user_authenticated=True)
+        print(response['Location'])
         render_patched.assert_called_once()
         self.assertTrue(
             render_patched.call_args[0][1], settings.get('OIDC_TEMPLATES')['authorize'])

@@ -30,7 +30,7 @@ from jwkest import long_to_base64
 
 from oidc_provider.compat import get_attr_or_callable
 from oidc_provider.lib.claims import StandardScopeClaims
-from oidc_provider.lib.endpoints.authorize import AuthorizeEndpoint
+from oidc_provider.lib.endpoints.authorize import AuthorizeEndpoint, ValidationError
 from oidc_provider.lib.endpoints.token import TokenEndpoint
 from oidc_provider.lib.errors import (
     AuthorizeError,
@@ -80,9 +80,9 @@ class AuthorizeView(View):
         See:
         """
 
-        authorize = self.authorize_endpoint_class(request)
-
         try:
+            authorize = self.authorize_endpoint_class(request)
+
             authorize.validate_params()
 
             if not get_attr_or_callable(request.user, 'is_authenticated'):
@@ -112,6 +112,15 @@ class AuthorizeView(View):
 
             return redirect(uri)
 
+        # The new exception thrown by the marshmallow validator
+        except ValidationError as error:
+            if error.redirectable:
+                return redirect(
+                    error.uri()
+                )
+            else:
+                return render(request, OIDC_TEMPLATES['error'], error.render_context())
+
     def get(self, request, authorize, *args, **kwargs):
         hook_resp = settings.get('OIDC_AFTER_USERLOGIN_HOOK', import_str=True)(
             request=request, user=request.user,
@@ -121,6 +130,7 @@ class AuthorizeView(View):
 
         if 'login' in authorize.params['prompt']:
             if 'none' in authorize.params['prompt']:
+                print(authorize.params['prompt'])
                 raise AuthorizeError(
                     authorize.params['redirect_uri'], 'login_required',
                     authorize.grant_type)
@@ -291,6 +301,8 @@ class ProviderInfoView(View):
                                                         'client_secret_basic']
 
         dic['claims_supported'] = settings.get('OIDC_CLAIMS_SUPPORTED')
+
+        dic['request_uri_parameter_supported'] = False
 
         if settings.get('OIDC_SESSION_MANAGEMENT_ENABLE'):
             dic['check_session_iframe'] = site_url + reverse('oidc_provider:check-session-iframe')

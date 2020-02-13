@@ -8,16 +8,19 @@ try:
     from urllib import urlencode
     from urlparse import urlsplit, parse_qs, urlunsplit
 except ImportError:
-    from urllib.parse import urlsplit, parse_qs, urlunsplit, urlencode
+    from urllib.parse import urlsplit, parse_qs, urlunsplit, urlencode, quote
 from uuid import uuid4
 
 from django.utils import timezone
+from marshmallow import Schema, fields, validate, EXCLUDE
 
 from oidc_provider.lib.claims import StandardScopeClaims
+
 from oidc_provider.lib.errors import (
     AuthorizeError,
     ClientIdError,
     RedirectUriError,
+    _errors
 )
 from oidc_provider.lib.utils.token import (
     create_code,
@@ -34,107 +37,31 @@ from oidc_provider.lib.utils.common import get_browser_state_or_default
 
 logger = logging.getLogger(__name__)
 
+_allowed_prompt_params = {'none', 'login', 'consent', 'select_account'}
+
 
 class AuthorizeEndpoint(object):
-    _allowed_prompt_params = {'none', 'login', 'consent', 'select_account'}
     client_class = Client
 
     def __init__(self, request):
         self.request = request
         self.params = {}
 
-        self._extract_params()
+    def validate_params(self):
+        query_dict = (self.request.POST if self.request.method == 'POST'
+                      else self.request.GET)
 
-        # Determine which flow to use.
-        if self.params['response_type'] in ['code']:
-            self.grant_type = 'authorization_code'
-        elif self.params['response_type'] in ['id_token', 'id_token token', 'token']:
-            self.grant_type = 'implicit'
-        elif self.params['response_type'] in [
-                'code token', 'code id_token', 'code id_token token']:
-            self.grant_type = 'hybrid'
-        else:
-            self.grant_type = None
+        self.params = AuthorizeSchema().load(query_dict)
 
         # Determine if it's an OpenID Authentication request (or OAuth2).
         self.is_authentication = 'openid' in self.params['scope']
 
-    def _extract_params(self):
-        """
-        Get all the params used by the Authorization Code Flow
-        (and also for the Implicit and Hybrid).
-
-        See: http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
-        """
-        # Because in this endpoint we handle both GET
-        # and POST request.
-        query_dict = (self.request.POST if self.request.method == 'POST'
-                      else self.request.GET)
-
-        self.params['client_id'] = query_dict.get('client_id', '')
-        self.params['redirect_uri'] = query_dict.get('redirect_uri', '')
-        self.params['response_type'] = query_dict.get('response_type', '')
-        self.params['scope'] = query_dict.get('scope', '').split()
-        self.params['state'] = query_dict.get('state', '')
-        self.params['nonce'] = query_dict.get('nonce', '')
-
-        self.params['prompt'] = self._allowed_prompt_params.intersection(
-            set(query_dict.get('prompt', '').split()))
-
-        self.params['code_challenge'] = query_dict.get('code_challenge', '')
-        self.params['code_challenge_method'] = query_dict.get('code_challenge_method', '')
-
-    def validate_params(self):
-        # Client validation.
         try:
             self.client = self.client_class.objects.get(client_id=self.params['client_id'])
         except Client.DoesNotExist:
             logger.debug('[Authorize] Invalid client identifier: %s', self.params['client_id'])
             raise ClientIdError()
 
-        # Redirect URI validation.
-        if self.is_authentication and not self.params['redirect_uri']:
-            logger.debug('[Authorize] Missing redirect uri.')
-            raise RedirectUriError()
-        if not self.client.is_allowed_redirect_uri(self.params['redirect_uri']):
-            logger.debug('[Authorize] Invalid redirect uri: %s', self.params['redirect_uri'])
-            raise RedirectUriError()
-
-        # Grant type validation.
-        if not self.grant_type:
-            logger.debug('[Authorize] Invalid response type: %s', self.params['response_type'])
-            raise AuthorizeError(
-                self.params['redirect_uri'], 'unsupported_response_type', self.grant_type)
-
-        if (not self.is_authentication and (self.grant_type == 'hybrid' or
-                                            self.params['response_type'] in
-                                            ['id_token', 'id_token token'])):
-            logger.debug('[Authorize] Missing openid scope.')
-            raise AuthorizeError(self.params['redirect_uri'], 'invalid_scope', self.grant_type)
-
-        # Nonce parameter validation.
-        if self.is_authentication and self.grant_type == 'implicit' and not self.params['nonce']:
-            raise AuthorizeError(self.params['redirect_uri'], 'invalid_request', self.grant_type)
-
-        # Response type parameter validation.
-        if self.is_authentication \
-                and self.params['response_type'] not in self.client.response_type_values():
-            raise AuthorizeError(self.params['redirect_uri'], 'invalid_request', self.grant_type)
-
-        # PKCE validation of the transformation method.
-        if self.params['code_challenge']:
-            if not (self.params['code_challenge_method'] in ['plain', 'S256']):
-                raise AuthorizeError(
-                    self.params['redirect_uri'], 'invalid_request', self.grant_type)
-
-        # Require PKCE for public clients that have 'require_pkce' set
-        if self.client.client_type == 'public' and self.client.require_pkce:
-            if not self.params['code_challenge']:
-                raise AuthorizeError(
-                    self.params['redirect_uri'],
-                    'invalid_request',
-                    self.grant_type, description='code challenge required'
-                )
 
     def create_response_uri(self):
         uri = urlsplit(self.params['redirect_uri'])
@@ -295,3 +222,111 @@ class AuthorizeEndpoint(object):
             scopes_extra = []
 
         return scopes + scopes_extra
+
+
+class StrList(fields.List):
+    """
+    Extends List to support serializing and deserializing delimeter separated strings.
+    """
+
+    def __init__(self, cls_or_instance, separator=",", **kwargs):
+        self.separator = separator
+        super().__init__(cls_or_instance, **kwargs)
+
+    def _serialize(self, value, attr, obj, **kwargs):
+        return self.separator.join(super()._serialize(value, attr, obj, **kwargs))
+
+    def _deserialize(self, value, attr, data, **kwargs):
+        return super()._deserialize(value.split(self.separator), attr, data, **kwargs)
+
+
+class ValidationError(Exception):
+    def __init__(self, error, redirectable, state, redirect_uri, response_type):
+        self.error = error
+        self.redirectable = redirectable
+        self.description = quote(_errors.get(self.error, ''))
+        self.state = state
+        self.redirect_uri = redirect_uri
+
+        if response_type in ['code']:
+            self.grant_type = 'authorization_code'
+        elif response_type in ['id_token', 'id_token token', 'token']:
+            self.grant_type = 'implicit'
+        elif response_type in [
+                'code token', 'code id_token', 'code id_token token']:
+            self.grant_type = 'hybrid'
+        else:
+            self.grant_type = None
+
+    def uri(self):
+        # http://openid.net/specs/openid-connect-core-1_0.html#ImplicitAuthError
+        hash_or_question = '#' if self.grant_type == 'implicit' else '?'
+
+        uri = '{0}{1}error={2}&error_description={3}'.format(
+            self.redirect_uri,
+            hash_or_question,
+            self.error,
+            self.description)
+
+        # Add state if present.
+        return uri + '&state={0}'.format(self.state or '')
+
+    def render_context(self):
+        return {'error': self.error, 'description': self.description}
+
+
+class AuthorizeSchema(Schema):
+    class Meta:
+        unknown = EXCLUDE
+
+    # Required
+
+    scope = StrList(fields.Str(), required=True, separator=' ')
+    response_type = fields.Str(
+        required=True,
+    )
+    client_id = fields.Str(required=True)
+    redirect_uri = fields.URL(relative=False, required=True)
+    # Recommended
+
+    state = fields.Str(required=False)
+
+    # Optional
+
+    # default for code=query, default for token=fragment
+    nonce = fields.Str()
+    prompt = StrList(
+        fields.Str(
+            validate=validate.OneOf(_allowed_prompt_params)
+        ),
+        missing=(),
+        separator=" "
+    )
+
+    # TODO: timestamp field
+    max_age = fields.Str()
+
+    # PKCE
+    # TODO: Should be base64
+    code_challenge = fields.Str()
+    code_challenge_method = fields.Str(
+        validate=validate.OneOf(['S256', 'plain']),
+    )
+
+    # There are more values supported in the authorize request, but they're optional and
+    # not currently supported by django-oidc-provider
+
+    def handle_error(self, error, data, *, many, **kwargs):
+        print(error)
+        print(data)
+        raise ValidationError(
+            error=list(error.messages.keys())[0]
+            if isinstance(error.messages, dict) and len(error.messages.keys()) > 0
+            else 'invalid_request',
+            # Whether we passed enough information to be able to redirect the error to the RP
+            # Otherwise we have to render the error to the user.
+            redirectable={'client_id', 'redirect_uri'}.issubset(error.valid_data.keys()),
+            state=data.get('state'),
+            redirect_uri=data.get('redirect_uri'),
+            response_type=data.get('response_type')
+        ) from error

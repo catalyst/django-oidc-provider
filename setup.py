@@ -43,10 +43,12 @@ setup(
     test_suite='runtests.runtests',
     tests_require=[
         'pyjwkest>=1.3.0',
+        'marshmallow>=3.4.0'
         'mock>=2.0.0',
     ],
 
     install_requires=[
         'pyjwkest>=1.3.0',
+        'marshmallow>=3.4.0'
     ],
 )
