@@ -4,7 +4,7 @@ import uuid
 import random
 
 from base64 import b64encode
-from mock import Mock
+from mock import ANY, Mock
 
 try:
     from urllib.parse import urlencode
@@ -33,6 +33,7 @@ from oidc_provider.lib.endpoints.introspection import INTROSPECTION_SCOPE
 from oidc_provider.lib.utils.oauth2 import protected_resource_view
 from oidc_provider.lib.utils.token import create_code
 from oidc_provider.models import Token
+from oidc_provider.signals import token_created
 from oidc_provider.tests.app.utils import (
     create_fake_user,
     create_fake_client,
@@ -41,6 +42,7 @@ from oidc_provider.tests.app.utils import (
     FAKE_CODE_VERIFIER,
     FAKE_NONCE,
     FAKE_RANDOM_STRING,
+    CatchSignal,
 )
 from oidc_provider.views import (
     JwksView,
@@ -1004,3 +1006,96 @@ class TokenTestCase(TestCase):
         response_dict = json.loads(response.content.decode('utf-8'))
         self.assertEqual(200, response.status_code)
         self.assertEqual('email openid', response_dict['scope'])
+
+    def test_token_created_signal_authorization_code(self):
+        """
+        Make sure the token_created signal is called when a new token is created from
+        an authorisation_code
+        """
+
+        with CatchSignal(token_created) as mock:
+            code = self._create_code()
+
+            post_data = self._auth_code_post_data(code=code.code)
+
+            self._post_request(post_data)
+
+            mock.assert_called_once_with(
+                token=ANY,
+                grant_type="authorization_code",
+                code=ANY,
+                user=code.user,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )
+
+    def test_token_created_signal_refresh_token(self):
+        """
+        Make sure the token_created signal is called when a new token is made from
+        a refresh token
+        """
+
+        token = create_fake_token(self.user, self.SCOPE_LIST, self.client)
+        token.refresh_token = str(random.randint(1, 999999)).zfill(6)
+        token.save()
+
+        with CatchSignal(token_created) as mock:
+
+            post_data = self._refresh_token_post_data(token.refresh_token)
+            self._post_request(post_data)
+
+            mock.assert_called_once_with(
+                token=ANY,
+                grant_type="refresh_token",
+                refresh_token=ANY,
+                user=token.user,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )
+
+    @override_settings(OIDC_GRANT_TYPE_PASSWORD_ENABLE=True)
+    def test_token_created_signal_password(self):
+        """
+        Make sure the token_created signal is called when a new token is made
+        from a password grant.
+        """
+        with CatchSignal(token_created) as mock:
+            post_data = self._password_grant_post_data()
+            del (post_data['scope'])
+
+            self._post_request(
+                post_data=post_data,
+                extras=self._password_grant_auth_header()
+            )
+
+            mock.assert_called_once_with(
+                token=ANY,
+                grant_type="password",
+                user=self.user,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )
+
+    def test_token_created_signal_client_credentials_grant_type(self):
+        """
+        Make sure the token_created signal is called when a new token is made
+        from a client_credentials grant.
+        """
+        # Add scope for this client.
+        self.client.scope = ['something']
+        self.client.save()
+
+        with CatchSignal(token_created) as mock:
+            self._post_request(self._client_credentials_post_data())
+
+            mock.assert_called_once_with(
+                token=ANY,
+                grant_type="client_credentials",
+                user=None,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )

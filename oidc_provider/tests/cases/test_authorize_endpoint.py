@@ -9,7 +9,7 @@ try:
 except ImportError:
     from urlparse import parse_qs, urlsplit
 import uuid
-from mock import patch, mock
+from mock import patch, mock, ANY
 
 from django.contrib.auth.models import AnonymousUser
 from django.core.management import call_command
@@ -25,12 +25,14 @@ from django.test import TestCase
 from jwkest.jwt import JWT
 
 from oidc_provider import settings
+from oidc_provider.signals import code_created, token_created
 from oidc_provider.tests.app.utils import (
     create_fake_user,
     create_fake_client,
     create_fake_user_consent,
     FAKE_CODE_CHALLENGE,
     is_code_valid,
+    CatchSignal
 )
 from oidc_provider.lib.utils.authorize import strip_prompt_login
 from oidc_provider.views import AuthorizeView
@@ -634,6 +636,30 @@ class AuthorizationCodeFlowTestCase(TestCase, AuthorizeEndpointMixin):
         self.assertTrue(
             render_patched.call_args[0][1], settings.get('OIDC_TEMPLATES')['authorize'])
 
+    def test_code_created_signal(self):
+        """
+        Make sure code_created signal is called when a new code is created during a code flow.
+        """
+        with CatchSignal(code_created) as mock:
+            data = {
+                'client_id': self.client_with_no_consent.client_id,
+                'redirect_uri': self.client_with_no_consent.default_redirect_uri,
+                'response_type': 'code',
+                'scope': 'openid email',
+                'state': self.state,
+                'allow': 'Accept',
+            }
+
+            self._auth_request('get', data, is_user_authenticated=True)
+
+            mock.assert_called_once_with(
+                code=ANY,
+                user=self.user,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )
+
 
 class AuthorizationImplicitFlowTestCase(TestCase, AuthorizeEndpointMixin):
     """
@@ -833,6 +859,32 @@ class AuthorizationImplicitFlowTestCase(TestCase, AuthorizeEndpointMixin):
         self.assertIn('access_token', response['Location'])
         self.assertIn('id_token', response['Location'])
 
+    def test_token_created_signal(self):
+        """
+        Make sure the token_created signal is called when a new token is created
+        during a token login.
+        """
+        with CatchSignal(token_created) as mock:
+            data = {
+                'client_id': self.client_no_access.client_id,
+                'redirect_uri': self.client_no_access.default_redirect_uri,
+                'response_type': next(self.client_no_access.response_type_values()),
+                'scope': 'openid email',
+                'state': self.state,
+                'nonce': self.nonce,
+                'allow': 'Accept',
+            }
+
+            self._auth_request('post', data, is_user_authenticated=True)
+            mock.assert_called_once_with(
+                token=ANY,
+                grant_type="token_flow",
+                user=self.user,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )
+
 
 class AuthorizationHybridFlowTestCase(TestCase, AuthorizeEndpointMixin):
     """
@@ -886,6 +938,39 @@ class AuthorizationHybridFlowTestCase(TestCase, AuthorizeEndpointMixin):
         response = self._auth_request('post', self.data, is_user_authenticated=True)
 
         self.assertIn('expires_in=36000', response['Location'])
+
+    def test_token_created_signal(self):
+        """
+        Make sure the token_created signal is called when a new token is created during
+        a hybrid login
+        """
+        with CatchSignal(token_created) as mock:
+            self._auth_request('post', self.data, is_user_authenticated=True)
+
+            mock.assert_called_once_with(
+                token=ANY,
+                grant_type="token_flow",
+                user=self.user,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )
+
+    def test_code_created_signal(self):
+        """
+        Make sure the code_created signal is called when a new code is created during
+        a hybrid login
+        """
+        with CatchSignal(code_created) as mock:
+            self._auth_request('post', self.data, is_user_authenticated=True)
+
+            mock.assert_called_once_with(
+                code=ANY,
+                user=self.user,
+                request=ANY,
+                sender=ANY,
+                signal=ANY
+            )
 
 
 class TestCreateResponseURI(TestCase):

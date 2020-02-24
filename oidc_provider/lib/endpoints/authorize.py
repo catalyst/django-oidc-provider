@@ -31,6 +31,7 @@ from oidc_provider.models import (
 )
 from oidc_provider import settings
 from oidc_provider.lib.utils.common import get_browser_state_or_default
+from oidc_provider.signals import code_created, token_created
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +153,12 @@ class AuthorizeEndpoint(object):
                     code_challenge=self.params['code_challenge'],
                     code_challenge_method=self.params['code_challenge_method'])
                 code.save()
+                code_created.send(
+                    sender=self.__class__,
+                    code=code,
+                    user=self.request.user,
+                    request=self.request
+                )
 
             if self.grant_type == 'authorization_code':
                 query_params['code'] = code.code
@@ -192,6 +199,14 @@ class AuthorizeEndpoint(object):
                 # Store the token.
                 token.id_token = id_token_dic
                 token.save()
+
+                token_created.send(
+                    sender=self.__class__,
+                    token=token,
+                    grant_type='token_flow',
+                    user=self.request.user,
+                    request=self.request
+                )
 
                 # Code parameter must be present if it's Hybrid Flow.
                 if self.grant_type == 'hybrid':

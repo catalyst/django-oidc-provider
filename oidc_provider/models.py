@@ -324,9 +324,9 @@ class Token(BaseCodeTokenModel):
         """
 
         alive = settings.get('OIDC_REFRESH_TOKEN_ALIVE_HOOK', import_str=True)(
+            token=self,
             issued_at=self.issued_at,
             user=self.user,
-            id_token=self.id_token,
             access_has_expired=self.access_has_expired()
         )
 

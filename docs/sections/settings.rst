@@ -283,11 +283,11 @@ This is called to determine whether a given token object is still valid.
 
 Receives the following arguments:
 
-* ``issued_at``: ``datetime.datetime`` The date and time the token was issued. 
+* ``token``: The ``oidc_provider.models.Token`` object being checked.
+
+* ``issued_at``: ``datetime.datetime`` The date and time the token was issued.
 
 * ``user``: ``DJANGO_AUTH_USER_MODEL`` The user this token was issued for.
-
-* ``id_token``: The `ID Token <https://openid.net/specs/openid-connect-core-1_0.html#IDToken>`_.
 
 * ``access_has_expired``: ``bool`` Whether the associated access token has expired.
 

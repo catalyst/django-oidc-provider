@@ -22,6 +22,7 @@ from oidc_provider.models import (
     Code,
     Token,
 )
+from oidc_provider.signals import token_created
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,15 @@ class TokenEndpoint(object):
         # Store the token.
         token.save()
 
+        token_created.send(
+            sender=self.__class__,
+            token=token,
+            grant_type='authorization_code',
+            code=self.code,
+            user=self.code.user,
+            request=self.request
+        )
+
         # Code cannot be reused
         # https://tools.ietf.org/html/rfc6749#section-4.1.2
         self.code.delete()
@@ -245,6 +255,15 @@ class TokenEndpoint(object):
         # Store the token.
         token.save()
 
+        token_created.send(
+            sender=self.__class__,
+            token=token,
+            grant_type='refresh_token',
+            refresh_token=self.token,
+            user=self.token.user,
+            request=self.request
+        )
+
         # Forget the old token.
         self.token.delete()
 
@@ -279,6 +298,14 @@ class TokenEndpoint(object):
         token.id_token = id_token_dic
         token.save()
 
+        token_created.send(
+            sender=self.__class__,
+            token=token,
+            grant_type='password',
+            user=self.user,
+            request=self.request
+        )
+
         return {
             'access_token': token.access_token,
             'refresh_token': token.refresh_token,
@@ -298,6 +325,14 @@ class TokenEndpoint(object):
             scope=token_scopes)
 
         token.save()
+
+        token_created.send(
+            sender=self.__class__,
+            token=token,
+            grant_type='client_credentials',
+            user=None,
+            request=self.request
+        )
 
         return {
             'access_token': token.access_token,

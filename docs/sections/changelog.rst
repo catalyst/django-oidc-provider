@@ -16,6 +16,7 @@ Unreleased
 * Added: Client option to require PKCE (RFC 7636). Defaults to on for **new** clients.
 * Added: Support for Python 3.8, Django 2.2, 3.0
 * Added: Support for using protected_resource_view on class views and DRF views
+* Added: token_created and code_created signals.
 * Changed: Loopback redirect URIs accept any port (RFC8252)
 * Changed: Moved check session iframe inline javascript to a separate file
 * Fixed: example project on Django 2.1.
