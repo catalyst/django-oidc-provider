@@ -6,10 +6,10 @@ from django.http import HttpRequest
 from django.test import TestCase, override_settings
 from django.utils import timezone
 from mock import mock
-
-from oidc_provider.lib.utils.common import get_issuer, get_browser_state_or_default
-from oidc_provider.lib.utils.token import create_token, create_id_token
-from oidc_provider.tests.app.utils import create_fake_user, create_fake_client
+from oidc_provider.lib.utils.common import (get_browser_state_or_default,
+                                            get_issuer)
+from oidc_provider.lib.utils.token import create_id_token, create_token
+from oidc_provider.tests.app.utils import create_fake_client, create_fake_user
 
 
 class Request(object):
@@ -69,7 +69,7 @@ class TokenTest(TestCase):
         login_timestamp = start_time - 1234
         self.user.last_login = timestamp_to_datetime(login_timestamp)
         client = create_fake_client("code")
-        token = create_token(self.user, client, [])
+        access_token, refresh_token, token = create_token(self.user, client, [])
         id_token_data = create_id_token(token=token, user=self.user, aud='test-aud')
         iat = id_token_data['iat']
         self.assertEqual(type(iat), int)

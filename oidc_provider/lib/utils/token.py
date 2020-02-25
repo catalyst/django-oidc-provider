@@ -1,22 +1,30 @@
-from datetime import timedelta
 import time
 import uuid
+from datetime import timedelta
 
 from Cryptodome.PublicKey.RSA import importKey
+from django.contrib.auth.hashers import PBKDF2PasswordHasher
 from django.utils import dateformat, timezone
+from django.utils.crypto import constant_time_compare
 from jwkest.jwk import RSAKey as jwk_RSAKey
 from jwkest.jwk import SYMKey
 from jwkest.jws import JWS
 from jwkest.jwt import JWT
-
-from oidc_provider.lib.utils.common import get_issuer, run_processing_hook
-from oidc_provider.lib.claims import StandardScopeClaims
-from oidc_provider.models import (
-    Code,
-    RSAKey,
-    Token,
-)
 from oidc_provider import settings
+from oidc_provider.lib.claims import StandardScopeClaims
+from oidc_provider.lib.utils.common import get_issuer, run_processing_hook
+from oidc_provider.models import Code, RSAKey, Token
+
+
+class TokenHasher:
+    hasher = PBKDF2PasswordHasher()
+    fixed_salt = "nosalt"
+
+    def encode(self, token):
+        return self.hasher.encode(token, salt=self.fixed_salt)
+
+    def verify(self, received_token, existing_hash):
+        return constant_time_compare(self.encode(received_token), existing_hash)
 
 
 def create_id_token(token, user, aud, nonce='', at_hash='', request=None, scope=None):
@@ -109,17 +117,20 @@ def create_token(user, client, scope, id_token_dic=None):
     token = Token()
     token.user = user
     token.client = client
-    token.access_token = uuid.uuid4().hex
+    access_token = uuid.uuid4().hex
+    refresh_token = uuid.uuid4().hex
+    token_hasher = TokenHasher()
+    token.access_token = token_hasher.encode(token=access_token)
+    token.refresh_token = token_hasher.encode(token=refresh_token)
 
     if id_token_dic is not None:
         token.id_token = id_token_dic
 
-    token.refresh_token = uuid.uuid4().hex
-    token.access_expires_at = timezone.now() + timedelta(
+    token.expires_at = timezone.now() + timedelta(
         seconds=settings.get('OIDC_TOKEN_EXPIRE'))
     token.scope = scope
 
-    return token
+    return access_token, refresh_token, token
 
 
 def create_code(user, client, scope, nonce, is_authentication,

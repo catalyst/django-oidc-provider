@@ -1,21 +1,15 @@
+import mock
 from django.core.management import call_command
+from django.test import TestCase
+from oidc_provider import settings
+from oidc_provider.lib.utils.token import (create_id_token, create_token,
+                                           encode_id_token)
+from oidc_provider.tests.app.utils import create_fake_client, create_fake_user
+
 try:
     from django.urls import reverse
 except ImportError:
     from django.core.urlresolvers import reverse
-from django.test import TestCase
-
-from oidc_provider.lib.utils.token import (
-    create_token,
-    create_id_token,
-    encode_id_token,
-)
-from oidc_provider import settings
-from oidc_provider.tests.app.utils import (
-    create_fake_client,
-    create_fake_user,
-)
-import mock
 
 
 class EndSessionTestCase(TestCase):
@@ -45,7 +39,7 @@ class EndSessionTestCase(TestCase):
             response, settings.get('OIDC_LOGIN_URL'),
             fetch_redirect_response=False)
 
-        token = create_token(self.user, self.oidc_client, [])
+        access_token, refresh_token, token = create_token(self.user, self.oidc_client, [])
         id_token_dic = create_id_token(
             token=token, user=self.user, aud=self.oidc_client.client_id)
         id_token = encode_id_token(id_token_dic, self.oidc_client)
@@ -61,7 +55,7 @@ class EndSessionTestCase(TestCase):
         query_params = {
             'post_logout_redirect_uri': self.LOGOUT_URL,
         }
-        token = create_token(self.user, self.oidc_client, [])
+        access_token, refresh_token, token = create_token(self.user, self.oidc_client, [])
         id_token_dic = create_id_token(
             token=token, user=self.user, aud=self.oidc_client.client_id)
         id_token_dic['aud'] = [id_token_dic['aud']]

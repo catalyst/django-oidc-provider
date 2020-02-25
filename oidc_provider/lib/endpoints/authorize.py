@@ -1,37 +1,25 @@
-from datetime import timedelta
-from hashlib import (
-    md5,
-    sha256,
-)
 import logging
+from datetime import timedelta
+from hashlib import md5, sha256
+from uuid import uuid4
+
+from django.utils import timezone
+from oidc_provider import settings
+from oidc_provider.lib.claims import StandardScopeClaims
+from oidc_provider.lib.errors import (AuthorizeError, ClientIdError,
+                                      RedirectUriError)
+from oidc_provider.lib.utils.common import get_browser_state_or_default
+from oidc_provider.lib.utils.token import (create_code, create_id_token,
+                                           create_token, encode_id_token)
+from oidc_provider.models import Client, UserConsent
+from oidc_provider.signals import code_created, token_created
+
 try:
     from urllib import urlencode
     from urlparse import urlsplit, parse_qs, urlunsplit
 except ImportError:
     from urllib.parse import urlsplit, parse_qs, urlunsplit, urlencode
-from uuid import uuid4
 
-from django.utils import timezone
-
-from oidc_provider.lib.claims import StandardScopeClaims
-from oidc_provider.lib.errors import (
-    AuthorizeError,
-    ClientIdError,
-    RedirectUriError,
-)
-from oidc_provider.lib.utils.token import (
-    create_code,
-    create_id_token,
-    create_token,
-    encode_id_token,
-)
-from oidc_provider.models import (
-    Client,
-    UserConsent,
-)
-from oidc_provider import settings
-from oidc_provider.lib.utils.common import get_browser_state_or_default
-from oidc_provider.signals import code_created, token_created
 
 logger = logging.getLogger(__name__)
 
@@ -164,7 +152,7 @@ class AuthorizeEndpoint(object):
                 query_params['code'] = code.code
                 query_params['state'] = self.params['state'] if self.params['state'] else ''
             elif self.grant_type in ['implicit', 'hybrid']:
-                token = create_token(
+                access_token, refresh_token, token = create_token(
                     user=self.request.user,
                     client=self.client,
                     scope=self.params['scope'])

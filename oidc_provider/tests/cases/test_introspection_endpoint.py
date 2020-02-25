@@ -1,27 +1,25 @@
 import time
-import random
+import uuid
 
-from mock import patch, Mock
+from django.core.management import call_command
+from django.test import RequestFactory, TestCase, override_settings
+from django.utils import timezone
+from django.utils.encoding import force_text
+from mock import Mock, patch
+from oidc_provider.lib.utils.token import TokenHasher, create_id_token
+from oidc_provider.tests.app.utils import (FAKE_RANDOM_STRING,
+                                           create_fake_client,
+                                           create_fake_token, create_fake_user)
+from oidc_provider.views import TokenIntrospectionView
+
 try:
     from urllib.parse import urlencode
 except ImportError:
     from urllib import urlencode
-from django.utils.encoding import force_text
-from django.core.management import call_command
-from django.test import TestCase, RequestFactory, override_settings
-from django.utils import timezone
 try:
     from django.urls import reverse
 except ImportError:
     from django.core.urlresolvers import reverse
-
-from oidc_provider.tests.app.utils import (
-    create_fake_user,
-    create_fake_client,
-    create_fake_token,
-    FAKE_RANDOM_STRING)
-from oidc_provider.lib.utils.token import create_id_token
-from oidc_provider.views import TokenIntrospectionView
 
 
 class IntrospectionTestCase(TestCase):
@@ -36,7 +34,9 @@ class IntrospectionTestCase(TestCase):
         self.resource.scope = ['token_introspection', self.aud]
         self.resource.save()
         self.token = create_fake_token(self.user, self.client.scope, self.client)
-        self.token.access_token = str(random.randint(1, 999999)).zfill(6)
+        self.access_token = uuid.uuid4().hex
+        self.token_hasher = TokenHasher()
+        self.token.access_token = self.token_hasher.encode(token=self.access_token)
         self.now = time.time()
         with patch('oidc_provider.lib.utils.token.time.time') as time_func:
             time_func.return_value = self.now
@@ -66,7 +66,7 @@ class IntrospectionTestCase(TestCase):
         data = {
             'client_id': kwargs.get('client_id', self.resource.client_id),
             'client_secret': kwargs.get('client_secret', self.resource.client_secret),
-            'token': kwargs.get('access_token', self.token.access_token),
+            'token': kwargs.get('access_token', self.access_token),
         }
 
         request = self.factory.post(url, data=urlencode(data),

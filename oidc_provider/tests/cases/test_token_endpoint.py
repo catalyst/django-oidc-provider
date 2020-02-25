@@ -1,54 +1,38 @@
 import json
+import random
 import time
 import uuid
-import random
-
 from base64 import b64encode
-from mock import ANY, Mock
-
-try:
-    from urllib.parse import urlencode
-except ImportError:
-    from urllib import urlencode
 
 from django.core.management import call_command
 from django.http import JsonResponse
+from django.test import RequestFactory, TestCase, override_settings
+from django.views.decorators.http import require_http_methods
+from jwkest.jwk import KEYS
+from jwkest.jws import JWS
+from jwkest.jwt import JWT
+from mock import ANY, Mock, patch
+from oidc_provider.lib.endpoints.introspection import INTROSPECTION_SCOPE
+from oidc_provider.lib.utils.oauth2 import protected_resource_view
+from oidc_provider.lib.utils.token import TokenHasher, create_code
+from oidc_provider.models import Token
+from oidc_provider.signals import token_created
+from oidc_provider.tests.app.utils import (FAKE_CODE_CHALLENGE,
+                                           FAKE_CODE_VERIFIER, FAKE_NONCE,
+                                           FAKE_RANDOM_STRING, CatchSignal,
+                                           create_fake_client,
+                                           create_fake_token, create_fake_user)
+from oidc_provider.views import JwksView, TokenView, userinfo
 
 try:
     from django.urls import reverse
 except ImportError:
     from django.core.urlresolvers import reverse
-from django.test import (
-    RequestFactory,
-    override_settings,
-)
-from django.test import TestCase
-from django.views.decorators.http import require_http_methods
-from jwkest.jwk import KEYS
-from jwkest.jws import JWS
-from jwkest.jwt import JWT
-from mock import patch
 
-from oidc_provider.lib.endpoints.introspection import INTROSPECTION_SCOPE
-from oidc_provider.lib.utils.oauth2 import protected_resource_view
-from oidc_provider.lib.utils.token import create_code
-from oidc_provider.models import Token
-from oidc_provider.signals import token_created
-from oidc_provider.tests.app.utils import (
-    create_fake_user,
-    create_fake_client,
-    create_fake_token,
-    FAKE_CODE_CHALLENGE,
-    FAKE_CODE_VERIFIER,
-    FAKE_NONCE,
-    FAKE_RANDOM_STRING,
-    CatchSignal,
-)
-from oidc_provider.views import (
-    JwksView,
-    TokenView,
-    userinfo,
-)
+try:
+    from urllib.parse import urlencode
+except ImportError:
+    from urllib import urlencode
 
 
 class TokenTestCase(TestCase):
@@ -264,8 +248,8 @@ class TokenTestCase(TestCase):
             response_dict['id_token'].encode('utf-8'), self._get_keys())
 
         token = Token.objects.get(user=self.user)
-        self.assertEqual(response_dict['access_token'], token.access_token)
-        self.assertEqual(response_dict['refresh_token'], token.refresh_token)
+        self.check_token_match(response_dict['access_token'], token.access_token)
+        self.check_token_match(response_dict['refresh_token'], token.refresh_token)
         self.assertEqual(response_dict['expires_in'], 120)
         self.assertEqual(response_dict['token_type'], 'bearer')
         self.assertEqual(id_token['sub'], str(self.user.id))
@@ -280,6 +264,14 @@ class TokenTestCase(TestCase):
                 self.assertIn(claim, userinfo)
             else:
                 self.assertNotIn(claim, userinfo)
+
+    def check_token_match(self, received_token, generated_token):
+        self.assertEqual(
+            self.hash_token(received_token),
+            generated_token)
+
+    def hash_token(self, token):
+        return TokenHasher().encode(token=token)
 
     @override_settings(OIDC_GRANT_TYPE_PASSWORD_ENABLE=True,
                        AUTHENTICATION_BACKENDS=("oidc_provider.tests.app.utils.TestAuthBackend",))
@@ -310,8 +302,9 @@ class TokenTestCase(TestCase):
         id_token = JWS().verify_compact(response_dic['id_token'].encode('utf-8'), SIGKEYS)
 
         token = Token.objects.get(user=self.user)
-        self.assertEqual(response_dic['access_token'], token.access_token)
-        self.assertEqual(response_dic['refresh_token'], token.refresh_token)
+
+        self.check_token_match(response_dic['access_token'], token.access_token)
+        self.check_token_match(response_dic['refresh_token'], token.refresh_token)
         self.assertEqual(response_dic['token_type'], 'bearer')
         self.assertEqual(response_dic['expires_in'], 720)
         self.assertEqual(id_token['sub'], str(self.user.id))
@@ -926,7 +919,7 @@ class TokenTestCase(TestCase):
 
         response = self._post_request(self._client_credentials_post_data())
         response_dict = json.loads(response.content.decode('utf-8'))
-        token = Token.objects.get(access_token=response_dict['access_token'])
+        token = Token.objects.get(access_token=self.hash_token(response_dict['access_token']))
         self.assertTrue(str(token))
 
     @override_settings(OIDC_GRANT_TYPE_PASSWORD_ENABLE=True)
