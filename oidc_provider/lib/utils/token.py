@@ -1,9 +1,9 @@
+import hashlib
 import time
 import uuid
 from datetime import timedelta
 
 from Cryptodome.PublicKey.RSA import importKey
-from django.contrib.auth.hashers import PBKDF2PasswordHasher
 from django.utils import dateformat, timezone
 from django.utils.crypto import constant_time_compare
 from jwkest.jwk import RSAKey as jwk_RSAKey
@@ -17,11 +17,10 @@ from oidc_provider.models import Code, RSAKey, Token
 
 
 class TokenHasher:
-    hasher = PBKDF2PasswordHasher()
-    fixed_salt = "nosalt"
-
     def encode(self, token):
-        return self.hasher.encode(token, salt=self.fixed_salt)
+        hasher = hashlib.sha256()
+        hasher.update(token.encode('ascii'))
+        return hasher.hexdigest()
 
     def verify(self, received_token, existing_hash):
         return constant_time_compare(self.encode(received_token), existing_hash)
