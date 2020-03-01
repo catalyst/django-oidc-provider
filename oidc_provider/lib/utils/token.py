@@ -142,7 +142,9 @@ def create_code(user, client, scope, nonce, is_authentication,
     code.user = user
     code.client = client
 
-    code.code = uuid.uuid4().hex
+    code_token = uuid.uuid4().hex
+    token_hasher = TokenHasher()
+    code.code = token_hasher.encode(token=code_token)
 
     if code_challenge and code_challenge_method:
         code.code_challenge = code_challenge
@@ -154,7 +156,7 @@ def create_code(user, client, scope, nonce, is_authentication,
     code.nonce = nonce
     code.is_authentication = is_authentication
 
-    return code
+    return code_token, code
 
 
 def get_client_alg_keys(client):

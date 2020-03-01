@@ -132,7 +132,7 @@ class AuthorizeEndpoint(object):
 
         try:
             if self.grant_type in ['authorization_code', 'hybrid']:
-                code = create_code(
+                code_token, code = create_code(
                     user=self.request.user,
                     client=self.client,
                     scope=self.params['scope'],
@@ -149,7 +149,7 @@ class AuthorizeEndpoint(object):
                 )
 
             if self.grant_type == 'authorization_code':
-                query_params['code'] = code.code
+                query_params['code'] = code_token
                 query_params['state'] = self.params['state'] if self.params['state'] else ''
             elif self.grant_type in ['implicit', 'hybrid']:
                 access_token, refresh_token, token = create_token(
@@ -198,7 +198,7 @@ class AuthorizeEndpoint(object):
 
                 # Code parameter must be present if it's Hybrid Flow.
                 if self.grant_type == 'hybrid':
-                    query_fragment['code'] = code.code
+                    query_fragment['code'] = code_token
 
                 query_fragment['token_type'] = 'bearer'
 

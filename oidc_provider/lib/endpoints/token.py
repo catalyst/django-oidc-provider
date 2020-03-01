@@ -31,7 +31,9 @@ class TokenEndpoint(object):
         self.params['client_secret'] = client_secret
         self.params['redirect_uri'] = self.request.POST.get('redirect_uri', '')
         self.params['grant_type'] = self.request.POST.get('grant_type', '')
-        self.params['code'] = self.request.POST.get('code', '')
+        self.params['code'] = self.token_hasher.encode(
+            self.request.POST.get('code', '')
+        )
         self.params['state'] = self.request.POST.get('state', '')
         self.params['scope'] = self.request.POST.get('scope', '')
         self.params['refresh_token'] = self.token_hasher.encode(

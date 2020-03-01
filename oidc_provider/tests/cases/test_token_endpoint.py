@@ -126,7 +126,7 @@ class TokenTestCase(TestCase):
         """
         Generate a valid grant code.
         """
-        code = create_code(
+        code_token, code = create_code(
             user=self.user,
             client=self.client,
             scope=(scope if scope else TokenTestCase.SCOPE_LIST),
@@ -134,7 +134,7 @@ class TokenTestCase(TestCase):
             is_authentication=True)
         code.save()
 
-        return code
+        return code_token, code
 
     def _get_keys(self):
         """
@@ -292,9 +292,9 @@ class TokenTestCase(TestCase):
         the JOSE Header.
         """
         SIGKEYS = self._get_keys()
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
         response_dic = json.loads(response.content.decode('utf-8'))
@@ -319,10 +319,10 @@ class TokenTestCase(TestCase):
         """
         SIGKEYS = self._get_keys()
         for code_scope in [['openid'], ['openid', 'email'], ['openid', 'profile']]:
-            code = self._create_code(code_scope)
+            code_token, code = self._create_code(code_scope)
 
             post_data = self._auth_code_post_data(
-                code=code.code, scope=code_scope)
+                code=code_token, scope=code_scope)
 
             response = self._post_request(post_data)
             response_dic = json.loads(response.content.decode('utf-8'))
@@ -375,9 +375,9 @@ class TokenTestCase(TestCase):
         SIGKEYS = self._get_keys()
 
         # Retrieve refresh token
-        code = self._create_code()
+        code_token, code = self._create_code()
         self.assertEqual(code.scope, TokenTestCase.SCOPE_LIST)
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
         start_time = time.time()
         with patch('oidc_provider.lib.utils.token.time.time') as time_func:
             time_func.return_value = start_time
@@ -481,8 +481,8 @@ class TokenTestCase(TestCase):
         See http://openid.net/specs/openid-connect-core-1_0.html#AuthRequest and
         http://openid.net/specs/openid-connect-core-1_0.html#HybridTokenRequest.
         """
-        code = self._create_code()
-        post_data = self._auth_code_post_data(code=code.code)
+        code_token, code = self._create_code()
+        post_data = self._auth_code_post_data(code=code_token)
 
         # Unregistered URI
         post_data['redirect_uri'] = 'http://invalid.example.org'
@@ -538,10 +538,10 @@ class TokenTestCase(TestCase):
 
         See: http://tools.ietf.org/html/rfc6749#section-2.3.1
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
         # Test a valid request to the token endpoint.
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -555,8 +555,8 @@ class TokenTestCase(TestCase):
         invalid_data['client_id'] = self.client.client_id * 2  # Fake id.
 
         # Create another grant code.
-        code = self._create_code()
-        invalid_data['code'] = code.code
+        code_token, code = self._create_code()
+        invalid_data['code'] = code_token
 
         response = self._post_request(invalid_data)
 
@@ -569,8 +569,8 @@ class TokenTestCase(TestCase):
         basicauth_data = post_data.copy()
 
         # Create another grant code.
-        code = self._create_code()
-        basicauth_data['code'] = code.code
+        code_token, code = self._create_code()
+        basicauth_data['code'] = code_token
 
         del basicauth_data['client_id']
         del basicauth_data['client_secret']
@@ -593,9 +593,9 @@ class TokenTestCase(TestCase):
 
         See http://openid.net/specs/openid-connect-core-1_0.html#IDToken
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -619,9 +619,9 @@ class TokenTestCase(TestCase):
         """
         If access_token is included, the id_token SHOULD contain an at_hash.
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -639,9 +639,9 @@ class TokenTestCase(TestCase):
         SIGKEYS = self._get_keys()
         RSAKEYS = [k for k in SIGKEYS if k.kty == 'RSA']
 
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
         response_dic = json.loads(response.content.decode('utf-8'))
@@ -654,9 +654,9 @@ class TokenTestCase(TestCase):
         """
         Test custom function for setting OIDC_IDTOKEN_SUB_GENERATOR.
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -671,9 +671,9 @@ class TokenTestCase(TestCase):
         """
         Test custom function for setting OIDC_IDTOKEN_PROCESSING_HOOK.
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -692,9 +692,9 @@ class TokenTestCase(TestCase):
         """
         Test custom function for setting OIDC_IDTOKEN_PROCESSING_HOOK.
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -713,9 +713,9 @@ class TokenTestCase(TestCase):
         """
         Test custom function for setting OIDC_IDTOKEN_PROCESSING_HOOK.
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -735,9 +735,9 @@ class TokenTestCase(TestCase):
         """
         Test custom function for setting OIDC_IDTOKEN_PROCESSING_HOOK.
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -760,9 +760,9 @@ class TokenTestCase(TestCase):
         """
         Test custom function for setting OIDC_IDTOKEN_PROCESSING_HOOK.
         """
-        code = self._create_code()
+        code_token, code = self._create_code()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -805,9 +805,9 @@ class TokenTestCase(TestCase):
         self.assertEqual(set(kwargs_passed.keys()), {'token', 'request'})
 
     def _request_id_token_with_scope(self, scope):
-        code = self._create_code(scope)
+        code_token, code = self._create_code(scope)
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         response = self._post_request(post_data)
 
@@ -820,12 +820,18 @@ class TokenTestCase(TestCase):
         Test Proof Key for Code Exchange by OAuth Public Clients.
         https://tools.ietf.org/html/rfc7636
         """
-        code = create_code(user=self.user, client=self.client,
-                           scope=['openid', 'email'], nonce=FAKE_NONCE, is_authentication=True,
-                           code_challenge=FAKE_CODE_CHALLENGE, code_challenge_method='S256')
+        code_token, code = create_code(
+            user=self.user,
+            client=self.client,
+            scope=['openid', 'email'],
+            nonce=FAKE_NONCE,
+            is_authentication=True,
+            code_challenge=FAKE_CODE_CHALLENGE,
+            code_challenge_method='S256'
+        )
         code.save()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         # Add parameters.
         post_data['code_verifier'] = FAKE_CODE_VERIFIER

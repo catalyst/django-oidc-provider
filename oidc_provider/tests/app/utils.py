@@ -5,21 +5,15 @@ from unittest import mock
 
 import django
 from django.contrib.auth.backends import ModelBackend
+from django.contrib.auth.models import User
+from django.utils import timezone
+from oidc_provider.lib.utils.token import TokenHasher
+from oidc_provider.models import Client, Code, ResponseType, Token, UserConsent
 
 try:
     from urlparse import parse_qs, urlsplit
 except ImportError:
     from urllib.parse import parse_qs, urlsplit
-
-from django.utils import timezone
-from django.contrib.auth.models import User
-
-from oidc_provider.models import (
-    Client,
-    Code,
-    Token,
-    ResponseType,
-    UserConsent)
 
 
 FAKE_NONCE = 'cb584e44c43ed6bd0bc2d9c7e242837d'
@@ -113,8 +107,7 @@ def is_code_valid(url, user, client):
     try:
         parsed = urlsplit(url)
         params = parse_qs(parsed.query or parsed.fragment)
-        code = params['code'][0]
-        code = Code.objects.get(code=code)
+        code = Code.objects.get(code=TokenHasher().encode(params['code'][0]))
         is_code_ok = (code.client == client) and (code.user == user)
     except Exception:
         is_code_ok = False
