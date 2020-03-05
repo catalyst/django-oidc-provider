@@ -160,7 +160,7 @@ class AuthorizeEndpoint(object):
                 # Check if response_type must include access_token in the response.
                 if (self.params['response_type'] in
                         ['id_token token', 'token', 'code token', 'code id_token token']):
-                    query_fragment['access_token'] = token.access_token
+                    query_fragment['access_token'] = access_token
 
                 # We don't need id_token if it's an OAuth2 request.
                 if self.is_authentication:

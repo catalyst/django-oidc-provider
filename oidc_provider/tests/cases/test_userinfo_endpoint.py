@@ -21,7 +21,6 @@ except ImportError:
     from django.core.urlresolvers import reverse
 
 
-
 class UserInfoTestCase(TestCase):
 
     def setUp(self):
@@ -111,9 +110,9 @@ class UserInfoTestCase(TestCase):
 
     @override_settings(OIDC_REFRESH_TOKEN_ALIVE_HOOK=Mock(return_value=False))
     def test_response_with_expired_token(self):
-        token = self._create_token()
+        access_token, refresh_token, token = self._create_token()
 
-        response = self._post_request(token.access_token)
+        response = self._post_request(access_token)
 
         self.assertEqual(response.status_code, 401)
 

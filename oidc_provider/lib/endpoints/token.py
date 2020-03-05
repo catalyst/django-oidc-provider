@@ -11,6 +11,7 @@ from oidc_provider.lib.utils.oauth2 import extract_client_auth
 from oidc_provider.lib.utils.token import (TokenHasher, create_id_token,
                                            create_token, encode_id_token)
 from oidc_provider.models import Client, Code, Token
+from oidc_provider.signals import token_created
 
 logger = logging.getLogger(__name__)
 
@@ -273,7 +274,7 @@ class TokenEndpoint(object):
     def create_access_token_response_dic(self):
         # See https://tools.ietf.org/html/rfc6749#section-4.3
         token_scopes = self.validate_requested_scopes()
-        access_token, refresh_token = create_token(
+        access_token, refresh_token, token = create_token(
             self.user,
             self.client,
             token_scopes)

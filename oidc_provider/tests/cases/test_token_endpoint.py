@@ -1,5 +1,4 @@
 import json
-import random
 import time
 import uuid
 from base64 import b64encode
@@ -21,7 +20,8 @@ from oidc_provider.tests.app.utils import (FAKE_CODE_CHALLENGE,
                                            FAKE_CODE_VERIFIER, FAKE_NONCE,
                                            FAKE_RANDOM_STRING, CatchSignal,
                                            create_fake_client,
-                                           create_fake_token, create_fake_user)
+                                           create_fake_refresh_token,
+                                           create_fake_user)
 from oidc_provider.views import JwksView, TokenView, userinfo
 
 try:
@@ -33,6 +33,10 @@ try:
     from urllib.parse import urlencode
 except ImportError:
     from urllib import urlencode
+
+
+def hash_token(token):
+    return TokenHasher().encode(token)
 
 
 class TokenTestCase(TestCase):
@@ -248,8 +252,8 @@ class TokenTestCase(TestCase):
             response_dict['id_token'].encode('utf-8'), self._get_keys())
 
         token = Token.objects.get(user=self.user)
-        self.check_token_match(response_dict['access_token'], token.access_token)
-        self.check_token_match(response_dict['refresh_token'], token.refresh_token)
+        self.assertEqual(hash_token(response_dict['access_token']), token.access_token)
+        self.assertEqual(hash_token(response_dict['refresh_token']), token.refresh_token)
         self.assertEqual(response_dict['expires_in'], 120)
         self.assertEqual(response_dict['token_type'], 'bearer')
         self.assertEqual(id_token['sub'], str(self.user.id))
@@ -264,14 +268,6 @@ class TokenTestCase(TestCase):
                 self.assertIn(claim, userinfo)
             else:
                 self.assertNotIn(claim, userinfo)
-
-    def check_token_match(self, received_token, generated_token):
-        self.assertEqual(
-            self.hash_token(received_token),
-            generated_token)
-
-    def hash_token(self, token):
-        return TokenHasher().encode(token=token)
 
     @override_settings(OIDC_GRANT_TYPE_PASSWORD_ENABLE=True,
                        AUTHENTICATION_BACKENDS=("oidc_provider.tests.app.utils.TestAuthBackend",))
@@ -303,8 +299,8 @@ class TokenTestCase(TestCase):
 
         token = Token.objects.get(user=self.user)
 
-        self.check_token_match(response_dic['access_token'], token.access_token)
-        self.check_token_match(response_dic['refresh_token'], token.refresh_token)
+        self.assertEqual(hash_token(response_dic['access_token']), token.access_token)
+        self.assertEqual(hash_token(response_dic['refresh_token']), token.refresh_token)
         self.assertEqual(response_dic['token_type'], 'bearer')
         self.assertEqual(response_dic['expires_in'], 720)
         self.assertEqual(id_token['sub'], str(self.user.id))
@@ -451,11 +447,11 @@ class TokenTestCase(TestCase):
         See https://tools.ietf.org/html/rfc6749#section-5.2
         """
 
-        token = create_fake_token(self.user, self.SCOPE_LIST, self.client)
-        token.refresh_token = str(random.randint(1, 999999)).zfill(6)
-        token.save()
-
-        post_data = self._refresh_token_post_data(token.refresh_token)
+        post_data = self._refresh_token_post_data(create_fake_refresh_token(
+            self.user,
+            self.SCOPE_LIST,
+            self.client
+        ))
         response = self._post_request(post_data)
         self.assertIn('invalid_grant', response.content.decode('utf-8'))
 
@@ -466,11 +462,11 @@ class TokenTestCase(TestCase):
         See https://tools.ietf.org/html/rfc6749#section-5.2
         """
 
-        token = create_fake_token(self.user, self.SCOPE_LIST, self.client)
-        token.refresh_token = str(random.randint(1, 999999)).zfill(6)
-        token.save()
-
-        post_data = self._refresh_token_post_data(token.refresh_token)
+        post_data = self._refresh_token_post_data(create_fake_refresh_token(
+            self.user,
+            self.SCOPE_LIST,
+            self.client
+        ))
         response = self._post_request(post_data)
         self.assertIn('access_token', json.loads(response.content.decode('utf-8')))
 
@@ -846,12 +842,18 @@ class TokenTestCase(TestCase):
         fails when PKCE was used during the authorization request.
         """
 
-        code = create_code(user=self.user, client=self.client,
-                           scope=['openid', 'email'], nonce=FAKE_NONCE, is_authentication=True,
-                           code_challenge=FAKE_CODE_CHALLENGE, code_challenge_method='S256')
+        code_token, code = create_code(
+            user=self.user,
+            client=self.client,
+            scope=['openid', 'email'],
+            nonce=FAKE_NONCE,
+            is_authentication=True,
+            code_challenge=FAKE_CODE_CHALLENGE,
+            code_challenge_method='S256'
+        )
         code.save()
 
-        post_data = self._auth_code_post_data(code=code.code)
+        post_data = self._auth_code_post_data(code=code_token)
 
         assert 'code_verifier' not in post_data
 
@@ -925,7 +927,7 @@ class TokenTestCase(TestCase):
 
         response = self._post_request(self._client_credentials_post_data())
         response_dict = json.loads(response.content.decode('utf-8'))
-        token = Token.objects.get(access_token=self.hash_token(response_dict['access_token']))
+        token = Token.objects.get(access_token=hash_token(response_dict['access_token']))
         self.assertTrue(str(token))
 
     @override_settings(OIDC_GRANT_TYPE_PASSWORD_ENABLE=True)
@@ -1013,9 +1015,9 @@ class TokenTestCase(TestCase):
         """
 
         with CatchSignal(token_created) as mock:
-            code = self._create_code()
+            code_token, code = self._create_code()
 
-            post_data = self._auth_code_post_data(code=code.code)
+            post_data = self._auth_code_post_data(code=code_token)
 
             self._post_request(post_data)
 
@@ -1035,20 +1037,20 @@ class TokenTestCase(TestCase):
         a refresh token
         """
 
-        token = create_fake_token(self.user, self.SCOPE_LIST, self.client)
-        token.refresh_token = str(random.randint(1, 999999)).zfill(6)
-        token.save()
-
         with CatchSignal(token_created) as mock:
 
-            post_data = self._refresh_token_post_data(token.refresh_token)
+            post_data = self._refresh_token_post_data(create_fake_refresh_token(
+                self.user,
+                self.SCOPE_LIST,
+                self.client)
+            )
             self._post_request(post_data)
 
             mock.assert_called_once_with(
                 token=ANY,
                 grant_type="refresh_token",
                 refresh_token=ANY,
-                user=token.user,
+                user=self.user,
                 request=ANY,
                 sender=ANY,
                 signal=ANY

@@ -100,6 +100,14 @@ def create_fake_token(user, scopes, client):
     return token
 
 
+def create_fake_refresh_token(user, scopes, client):
+    refresh_token = str(random.randint(1, 999999)).zfill(6)
+    token = create_fake_token(user, scopes, client)
+    token.refresh_token = TokenHasher().encode(token=refresh_token)
+    token.save()
+    return refresh_token
+
+
 def is_code_valid(url, user, client):
     """
     Check if the code inside the url is valid. Supporting both query string and fragment.

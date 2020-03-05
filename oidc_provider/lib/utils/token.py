@@ -125,7 +125,7 @@ def create_token(user, client, scope, id_token_dic=None):
     if id_token_dic is not None:
         token.id_token = id_token_dic
 
-    token.expires_at = timezone.now() + timedelta(
+    token.access_expires_at = timezone.now() + timedelta(
         seconds=settings.get('OIDC_TOKEN_EXPIRE'))
     token.scope = scope
 
