@@ -37,8 +37,9 @@ class TokenEndpoint(object):
         )
         self.params['state'] = self.request.POST.get('state', '')
         self.params['scope'] = self.request.POST.get('scope', '')
-        self.params['refresh_token'] = self.token_hasher.encode(
-            self.request.POST.get('refresh_token', '')
+        refresh_token = self.request.POST.get("refresh_token", "")
+        self.params["refresh_token"] = (
+            self.token_hasher.encode(refresh_token) if refresh_token != "" else ""
         )
         # PKCE parameter.
         self.params['code_verifier'] = self.request.POST.get('code_verifier')
