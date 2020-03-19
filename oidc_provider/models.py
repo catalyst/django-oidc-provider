@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 import base64
 import binascii
-from operator import attrgetter
-from hashlib import md5, sha256
 import json
+from hashlib import md5
+from operator import attrgetter
 from urllib.parse import urlparse
 
 from django.db import models
@@ -15,7 +15,6 @@ from Cryptodome.PublicKey import RSA
 
 from oidc_provider import settings
 from oidc_provider.lib.utils.storage import KeyStorage
-
 
 CLIENT_TYPE_CHOICES = [
     ('confidential', 'Confidential'),
@@ -298,10 +297,7 @@ class Token(BaseCodeTokenModel):
 
     @property
     def at_hash(self):
-        # @@@ d-o-p only supports 256 bits (change this if that changes)
-        hashed_access_token = sha256(
-            self.access_token.encode('ascii')
-        ).hexdigest().encode('ascii')
+        hashed_access_token = self.access_token.encode('ascii')
         return base64.urlsafe_b64encode(
             binascii.unhexlify(
                 hashed_access_token[:len(hashed_access_token) // 2]
