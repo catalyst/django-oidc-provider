@@ -69,7 +69,7 @@ class TokenTest(TestCase):
         login_timestamp = start_time - 1234
         self.user.last_login = timestamp_to_datetime(login_timestamp)
         client = create_fake_client("code")
-        access_token, refresh_token, token = create_token(self.user, client, [])
+        access_token, refresh_token, at_hash, token = create_token(self.user, client, [])
         id_token_data = create_id_token(token=token, user=self.user, aud='test-aud')
         iat = id_token_data['iat']
         self.assertEqual(type(iat), int)

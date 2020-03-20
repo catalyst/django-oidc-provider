@@ -1,6 +1,4 @@
 # -*- coding: utf-8 -*-
-import base64
-import binascii
 import json
 from hashlib import md5
 from operator import attrgetter
@@ -294,15 +292,6 @@ class Token(BaseCodeTokenModel):
 
     def __str__(self):
         return u'{0} - {1}'.format(self.client, self.access_token)
-
-    @property
-    def at_hash(self):
-        hashed_access_token = self.access_token.encode('ascii')
-        return base64.urlsafe_b64encode(
-            binascii.unhexlify(
-                hashed_access_token[:len(hashed_access_token) // 2]
-            )
-        ).rstrip(b'=').decode('ascii')
 
     def access_has_expired(self):
         return timezone.now() >= self.access_expires_at

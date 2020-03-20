@@ -173,7 +173,7 @@ class TokenEndpoint(object):
     def create_code_response_dic(self):
         # See https://tools.ietf.org/html/rfc6749#section-4.1
 
-        access_token, refresh_token, token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=self.code.user,
             client=self.code.client,
             scope=self.code.scope)
@@ -184,7 +184,7 @@ class TokenEndpoint(object):
                 aud=self.client.client_id,
                 token=token,
                 nonce=self.code.nonce,
-                at_hash=token.at_hash,
+                at_hash=at_hash,
                 request=self.request,
                 scope=token.scope,
             )
@@ -227,7 +227,7 @@ class TokenEndpoint(object):
         if unauthorized_scopes:
             raise TokenError('invalid_scope')
 
-        access_token, refresh_token, token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=self.token.user,
             client=self.token.client,
             scope=scope)
@@ -239,7 +239,7 @@ class TokenEndpoint(object):
                 aud=self.client.client_id,
                 token=token,
                 nonce=None,
-                at_hash=token.at_hash,
+                at_hash=at_hash,
                 request=self.request,
                 scope=token.scope,
             )
@@ -275,7 +275,7 @@ class TokenEndpoint(object):
     def create_access_token_response_dic(self):
         # See https://tools.ietf.org/html/rfc6749#section-4.3
         token_scopes = self.validate_requested_scopes()
-        access_token, refresh_token, token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             self.user,
             self.client,
             token_scopes)
@@ -285,7 +285,7 @@ class TokenEndpoint(object):
             user=self.user,
             aud=self.client.client_id,
             nonce='self.code.nonce',
-            at_hash=token.at_hash,
+            at_hash=at_hash,
             request=self.request,
             scope=token.scope,
         )
@@ -314,7 +314,7 @@ class TokenEndpoint(object):
         # See https://tools.ietf.org/html/rfc6749#section-4.4.3
         token_scopes = self.validate_requested_scopes()
 
-        access_token, refresh_token, token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=None,
             client=self.client,
             scope=token_scopes)

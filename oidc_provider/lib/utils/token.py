@@ -1,3 +1,5 @@
+import base64
+import binascii
 import hashlib
 import time
 import uuid
@@ -121,6 +123,12 @@ def create_token(user, client, scope, id_token_dic=None):
     token_hasher = TokenHasher()
     token.access_token = token_hasher.encode(token=access_token)
     token.refresh_token = token_hasher.encode(token=refresh_token)
+    ascii_access_token = token.access_token.encode('ascii')
+    at_hash = base64.urlsafe_b64encode(
+        binascii.unhexlify(
+            ascii_access_token[:len(ascii_access_token) // 2]
+        )
+    ).rstrip(b'=').decode('ascii')
 
     if id_token_dic is not None:
         token.id_token = id_token_dic
@@ -129,7 +137,7 @@ def create_token(user, client, scope, id_token_dic=None):
         seconds=settings.get('OIDC_TOKEN_EXPIRE'))
     token.scope = scope
 
-    return access_token, refresh_token, token
+    return access_token, refresh_token, at_hash, token
 
 
 def create_code(user, client, scope, nonce, is_authentication,

@@ -36,7 +36,7 @@ class UserInfoTestCase(TestCase):
             extra_scope = []
         scope = ['openid', 'email'] + extra_scope
 
-        access_token, refresh_token, token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=self.user,
             client=self.client,
             scope=scope)
@@ -52,7 +52,7 @@ class UserInfoTestCase(TestCase):
         token.id_token = id_token_dic
         token.save()
 
-        return access_token, refresh_token, token
+        return access_token, refresh_token, at_hash, token
 
     def _post_request(self, access_token, schema='Bearer'):
         """
@@ -71,7 +71,7 @@ class UserInfoTestCase(TestCase):
         return response
 
     def test_response_with_valid_token(self):
-        access_token, refresh_token, token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         # Test a valid request to the userinfo endpoint.
         response = self._post_request(access_token)
@@ -84,7 +84,7 @@ class UserInfoTestCase(TestCase):
         Some clients expect to be able to pass the token_type value from the token endpoint
         ("bearer") back to the identity provider unchanged.
         """
-        access_token, refresh_token, token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         response = self._post_request(access_token, schema='bearer')
 
@@ -92,7 +92,7 @@ class UserInfoTestCase(TestCase):
         self.assertEqual(bool(response.content), True)
 
     def test_response_with_expired_access_token(self):
-        access_token, refresh_token, token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         # Make token expired.
         token.access_expires_at = timezone.now() - timedelta(hours=1)
@@ -110,7 +110,7 @@ class UserInfoTestCase(TestCase):
 
     @override_settings(OIDC_REFRESH_TOKEN_ALIVE_HOOK=Mock(return_value=False))
     def test_response_with_expired_token(self):
-        access_token, refresh_token, token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         response = self._post_request(access_token)
 
@@ -123,7 +123,7 @@ class UserInfoTestCase(TestCase):
         self.assertEqual(is_header_field_ok, True)
 
     def test_response_with_invalid_scope(self):
-        access_token, refresh_token, token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         token.scope = ['otherone']
         token.save()
@@ -143,7 +143,7 @@ class UserInfoTestCase(TestCase):
         Make a GET request to the UserInfo Endpoint by sending access_token
         as query string parameter.
         """
-        access_token, refresh_token, token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         url = reverse('oidc_provider:userinfo') + '?' + urlencode({
             'access_token': access_token,
@@ -156,7 +156,9 @@ class UserInfoTestCase(TestCase):
         self.assertEqual(bool(response.content), True)
 
     def test_user_claims_in_response(self):
-        access_token, refresh_token, token = self._create_token(extra_scope=['profile'])
+        access_token, refresh_token, at_hash, token = self._create_token(
+            extra_scope=['profile']
+        )
         response = self._post_request(access_token)
         response_dic = json.loads(response.content.decode('utf-8'))
 
@@ -166,7 +168,9 @@ class UserInfoTestCase(TestCase):
         self.assertNotIn('profile', response_dic, msg='"profile" claim should not be in response.')
 
         # Now adding `address` scope.
-        access_token, refresh_token, token = self._create_token(extra_scope=['profile', 'address'])
+        access_token, refresh_token, at_hash, token = self._create_token(
+            extra_scope=['profile', 'address']
+        )
         response = self._post_request(access_token)
         response_dic = json.loads(response.content.decode('utf-8'))
 

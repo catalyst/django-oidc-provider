@@ -152,7 +152,7 @@ class AuthorizeEndpoint(object):
                 query_params['code'] = code_token
                 query_params['state'] = self.params['state'] if self.params['state'] else ''
             elif self.grant_type in ['implicit', 'hybrid']:
-                access_token, refresh_token, token = create_token(
+                access_token, refresh_token, at_hash, token = create_token(
                     user=self.request.user,
                     client=self.client,
                     scope=self.params['scope'])
@@ -174,7 +174,7 @@ class AuthorizeEndpoint(object):
                     }
                     # Include at_hash when access_token is being returned.
                     if 'access_token' in query_fragment:
-                        kwargs['at_hash'] = token.at_hash
+                        kwargs['at_hash'] = at_hash
                     id_token_dic = create_id_token(**kwargs)
 
                     # Check if response_type must include id_token in the response.
