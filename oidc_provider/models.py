@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import hashlib
 import json
 from hashlib import md5
 from operator import attrgetter
@@ -6,6 +7,7 @@ from urllib.parse import urlparse
 
 from django.db import models
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from django.utils.translation import gettext_lazy as _
 from django.conf import settings as django_settings
 from django.core.exceptions import ValidationError
@@ -235,6 +237,17 @@ class BaseCodeTokenModel(models.Model):
 
     def __unicode__(self):
         return self.__str__()
+
+    def hash_token(token):
+        hasher = hashlib.sha256()
+        hasher.update(token.encode('ascii'))
+        return hasher.hexdigest()
+
+    def verify_hash(received_token, existing_hash):
+        return constant_time_compare(
+            BaseCodeTokenModel.encode(received_token),
+            existing_hash
+        )
 
 
 class Code(BaseCodeTokenModel):

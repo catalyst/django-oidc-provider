@@ -13,7 +13,7 @@ from jwkest.jwt import JWT
 from mock import ANY, Mock, patch
 from oidc_provider.lib.endpoints.introspection import INTROSPECTION_SCOPE
 from oidc_provider.lib.utils.oauth2 import protected_resource_view
-from oidc_provider.lib.utils.token import TokenHasher, create_code
+from oidc_provider.lib.utils.token import create_code
 from oidc_provider.models import Token
 from oidc_provider.signals import token_created
 from oidc_provider.tests.app.utils import (FAKE_CODE_CHALLENGE,
@@ -36,7 +36,7 @@ except ImportError:
 
 
 def hash_token(token):
-    return TokenHasher().encode(token)
+    return Token.hash_token(token)
 
 
 class TokenTestCase(TestCase):

@@ -8,8 +8,8 @@ from django.http import JsonResponse
 from oidc_provider import settings
 from oidc_provider.lib.errors import TokenError, UserAuthError
 from oidc_provider.lib.utils.oauth2 import extract_client_auth
-from oidc_provider.lib.utils.token import (TokenHasher, create_id_token,
-                                           create_token, encode_id_token)
+from oidc_provider.lib.utils.token import (create_id_token, create_token,
+                                           encode_id_token)
 from oidc_provider.models import Client, Code, Token
 from oidc_provider.signals import token_created
 
@@ -22,7 +22,6 @@ class TokenEndpoint(object):
         self.request = request
         self.params = {}
         self.user = None
-        self.token_hasher = TokenHasher()
         self._extract_params()
 
     def _extract_params(self):
@@ -32,14 +31,13 @@ class TokenEndpoint(object):
         self.params['client_secret'] = client_secret
         self.params['redirect_uri'] = self.request.POST.get('redirect_uri', '')
         self.params['grant_type'] = self.request.POST.get('grant_type', '')
-        self.params['code'] = self.token_hasher.encode(
-            self.request.POST.get('code', '')
-        )
+        code = self.request.POST.get('code', '')
+        self.params['code'] = Code.hash_token(code) if code != '' else ''
         self.params['state'] = self.request.POST.get('state', '')
         self.params['scope'] = self.request.POST.get('scope', '')
-        refresh_token = self.request.POST.get("refresh_token", "")
+        refresh_token = self.request.POST.get('refresh_token', '')
         self.params["refresh_token"] = (
-            self.token_hasher.encode(refresh_token) if refresh_token != "" else ""
+            Token.hash_token(refresh_token) if refresh_token != '' else ''
         )
         # PKCE parameter.
         self.params['code_verifier'] = self.request.POST.get('code_verifier')

@@ -6,7 +6,6 @@ from functools import wraps
 from django.http import HttpResponse
 from django.utils.cache import patch_vary_headers
 from oidc_provider.lib.errors import BearerTokenError
-from oidc_provider.lib.utils.token import TokenHasher
 from oidc_provider.models import Token
 
 logger = logging.getLogger(__name__)
@@ -89,7 +88,7 @@ def protected_resource_view(scopes=None):
     def wrapper(view):
         @wraps(view)
         def view_wrapper(request,  *args, **kwargs):
-            access_token = TokenHasher().encode(token=extract_access_token(request))
+            access_token = Token.hash_token(token=extract_access_token(request))
 
             try:
                 try:

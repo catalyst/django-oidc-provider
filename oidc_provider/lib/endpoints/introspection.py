@@ -5,7 +5,6 @@ from oidc_provider import settings
 from oidc_provider.lib.errors import TokenIntrospectionError
 from oidc_provider.lib.utils.common import run_processing_hook
 from oidc_provider.lib.utils.oauth2 import extract_client_auth
-from oidc_provider.lib.utils.token import TokenHasher
 from oidc_provider.models import Client, Token
 
 logger = logging.getLogger(__name__)
@@ -21,12 +20,11 @@ class TokenIntrospectionEndpoint(object):
         self.token = None
         self.id_token = None
         self.client = None
-        self.token_hasher = TokenHasher()
         self._extract_params()
 
     def _extract_params(self):
         # Introspection only supports POST requests
-        self.params['token'] = self.token_hasher.encode(self.request.POST.get('token'))
+        self.params['token'] = Token.hash_token(self.request.POST.get('token'))
         client_id, client_secret = extract_client_auth(self.request)
         self.params['client_id'] = client_id
         self.params['client_secret'] = client_secret

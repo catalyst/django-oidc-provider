@@ -6,7 +6,8 @@ from django.test import RequestFactory, TestCase, override_settings
 from django.utils import timezone
 from django.utils.encoding import force_text
 from mock import Mock, patch
-from oidc_provider.lib.utils.token import TokenHasher, create_id_token
+from oidc_provider.lib.utils.token import create_id_token
+from oidc_provider.models import Token
 from oidc_provider.tests.app.utils import (FAKE_RANDOM_STRING,
                                            create_fake_client,
                                            create_fake_token, create_fake_user)
@@ -35,8 +36,7 @@ class IntrospectionTestCase(TestCase):
         self.resource.save()
         self.token = create_fake_token(self.user, self.client.scope, self.client)
         self.access_token = uuid.uuid4().hex
-        self.token_hasher = TokenHasher()
-        self.token.access_token = self.token_hasher.encode(token=self.access_token)
+        self.token.access_token = Token.hash_token(token=self.access_token)
         self.now = time.time()
         with patch('oidc_provider.lib.utils.token.time.time') as time_func:
             time_func.return_value = self.now

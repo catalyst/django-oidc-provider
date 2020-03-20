@@ -1,13 +1,11 @@
 import base64
 import binascii
-import hashlib
 import time
 import uuid
 from datetime import timedelta
 
 from Cryptodome.PublicKey.RSA import importKey
 from django.utils import dateformat, timezone
-from django.utils.crypto import constant_time_compare
 from jwkest.jwk import RSAKey as jwk_RSAKey
 from jwkest.jwk import SYMKey
 from jwkest.jws import JWS
@@ -16,16 +14,6 @@ from oidc_provider import settings
 from oidc_provider.lib.claims import StandardScopeClaims
 from oidc_provider.lib.utils.common import get_issuer, run_processing_hook
 from oidc_provider.models import Code, RSAKey, Token
-
-
-class TokenHasher:
-    def encode(self, token):
-        hasher = hashlib.sha256()
-        hasher.update(token.encode('ascii'))
-        return hasher.hexdigest()
-
-    def verify(self, received_token, existing_hash):
-        return constant_time_compare(self.encode(received_token), existing_hash)
 
 
 def create_id_token(token, user, aud, nonce='', at_hash='', request=None, scope=None):
@@ -120,9 +108,8 @@ def create_token(user, client, scope, id_token_dic=None):
     token.client = client
     access_token = uuid.uuid4().hex
     refresh_token = uuid.uuid4().hex
-    token_hasher = TokenHasher()
-    token.access_token = token_hasher.encode(token=access_token)
-    token.refresh_token = token_hasher.encode(token=refresh_token)
+    token.access_token = Token.hash_token(token=access_token)
+    token.refresh_token = Token.hash_token(token=refresh_token)
     ascii_access_token = token.access_token.encode('ascii')
     at_hash = base64.urlsafe_b64encode(
         binascii.unhexlify(
@@ -151,8 +138,7 @@ def create_code(user, client, scope, nonce, is_authentication,
     code.client = client
 
     code_token = uuid.uuid4().hex
-    token_hasher = TokenHasher()
-    code.code = token_hasher.encode(token=code_token)
+    code.code = Token.hash_token(token=code_token)
 
     if code_challenge and code_challenge_method:
         code.code_challenge = code_challenge
