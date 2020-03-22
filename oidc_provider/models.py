@@ -238,11 +238,13 @@ class BaseCodeTokenModel(models.Model):
     def __unicode__(self):
         return self.__str__()
 
+    @staticmethod
     def hash_token(token):
         hasher = hashlib.sha256()
         hasher.update(token.encode('ascii'))
         return hasher.hexdigest()
 
+    @staticmethod
     def verify_hash(received_token, existing_hash):
         return constant_time_compare(
             BaseCodeTokenModel.encode(received_token),
