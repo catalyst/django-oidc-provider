@@ -14,12 +14,17 @@ Unreleased
 * Added: Support for the ``claims_supported`` field of openid-configuration.
 * Added: ``OIDC_REFRESH_TOKEN_ALIVE_HOOK`` to control when refresh tokens are expired.
 * Added: Client option to require PKCE (RFC 7636). Defaults to on for **new** clients.
+* Added: Support for Python 3.8, Django 2.2, 3.0
+* Added: Support for using protected_resource_view on class views and DRF views
+* Added: token_created and code_created signals.
 * Changed: Loopback redirect URIs accept any port (RFC8252)
 * Changed: Moved check session iframe inline javascript to a separate file
 * Fixed: example project on Django 2.1.
 * Fixed: example in docs for translatable scopes (ugettext).
 * Fixed: Authorize page will redirect to login if the user logs out in the middle.
-* Removed: Support for Python 2.
+* Fixed: Protected resource view sets Vary: Authorization (fixes userinfo endpoint)
+* Fixed: PKCE is now correctly verified by the token endpoint
+* Removed: Support for Python 2, Django 2.0, 2.1
 
 0.7.0
 =====

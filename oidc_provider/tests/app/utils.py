@@ -1,6 +1,7 @@
 import random
 import string
 from datetime import timedelta
+from unittest import mock
 
 import django
 from django.contrib.auth.backends import ModelBackend
@@ -189,3 +190,16 @@ class TestAuthBackend:
         if django.VERSION[0] >= 2 or (django.VERSION[0] == 1 and django.VERSION[1] >= 11):
             assert len(args) > 0 and args[0]
         return ModelBackend().authenticate(*args, **kwargs)
+
+
+class CatchSignal:
+    def __init__(self, signal):
+        self.signal = signal
+        self.handler = mock.Mock()
+
+    def __enter__(self):
+        self.signal.connect(self.handler)
+        return self.handler
+
+    def __exit__(self, exc_type, exc_value, tb):
+        self.signal.disconnect(self.handler)

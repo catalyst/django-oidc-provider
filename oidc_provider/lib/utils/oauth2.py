@@ -4,6 +4,7 @@ import logging
 import re
 
 from django.http import HttpResponse
+from django.utils.cache import patch_vary_headers
 
 from oidc_provider.lib.errors import BearerTokenError
 from oidc_provider.models import Token
@@ -112,7 +113,10 @@ def protected_resource_view(scopes=None):
                     error.code, error.description)
                 return response
 
-            return view(request,  *args, **kwargs)
+            response = view(request,  *args, **kwargs)
+            # Ensure the view can't be cached between users
+            patch_vary_headers(response, ['Authorization'])
+            return response
 
         return view_wrapper
 
