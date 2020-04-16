@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 
 from django.db import models
 from django.utils import timezone
-from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import gettext_lazy as _
 from django.conf import settings as django_settings
 from django.core.exceptions import ValidationError
 from Cryptodome.PublicKey import RSA
