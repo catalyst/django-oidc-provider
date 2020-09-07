@@ -1,37 +1,25 @@
-from datetime import timedelta
-from hashlib import (
-    md5,
-    sha256,
-)
 import logging
+from datetime import timedelta
+from hashlib import md5, sha256
+from uuid import uuid4
+
+from django.utils import timezone
+from oidc_provider import settings
+from oidc_provider.lib.claims import StandardScopeClaims
+from oidc_provider.lib.errors import (AuthorizeError, ClientIdError,
+                                      RedirectUriError)
+from oidc_provider.lib.utils.common import get_browser_state_or_default
+from oidc_provider.lib.utils.token import (create_code, create_id_token,
+                                           create_token, encode_id_token)
+from oidc_provider.models import Client, UserConsent
+from oidc_provider.signals import code_created, token_created
+
 try:
     from urllib import urlencode
     from urlparse import urlsplit, parse_qs, urlunsplit
 except ImportError:
     from urllib.parse import urlsplit, parse_qs, urlunsplit, urlencode
-from uuid import uuid4
 
-from django.utils import timezone
-
-from oidc_provider.lib.claims import StandardScopeClaims
-from oidc_provider.lib.errors import (
-    AuthorizeError,
-    ClientIdError,
-    RedirectUriError,
-)
-from oidc_provider.lib.utils.token import (
-    create_code,
-    create_id_token,
-    create_token,
-    encode_id_token,
-)
-from oidc_provider.models import (
-    Client,
-    UserConsent,
-)
-from oidc_provider import settings
-from oidc_provider.lib.utils.common import get_browser_state_or_default
-from oidc_provider.signals import code_created, token_created
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +132,7 @@ class AuthorizeEndpoint(object):
 
         try:
             if self.grant_type in ['authorization_code', 'hybrid']:
-                code = create_code(
+                code_token, code = create_code(
                     user=self.request.user,
                     client=self.client,
                     scope=self.params['scope'],
@@ -161,10 +149,10 @@ class AuthorizeEndpoint(object):
                 )
 
             if self.grant_type == 'authorization_code':
-                query_params['code'] = code.code
+                query_params['code'] = code_token
                 query_params['state'] = self.params['state'] if self.params['state'] else ''
             elif self.grant_type in ['implicit', 'hybrid']:
-                token = create_token(
+                access_token, refresh_token, at_hash, token = create_token(
                     user=self.request.user,
                     client=self.client,
                     scope=self.params['scope'])
@@ -172,7 +160,7 @@ class AuthorizeEndpoint(object):
                 # Check if response_type must include access_token in the response.
                 if (self.params['response_type'] in
                         ['id_token token', 'token', 'code token', 'code id_token token']):
-                    query_fragment['access_token'] = token.access_token
+                    query_fragment['access_token'] = access_token
 
                 # We don't need id_token if it's an OAuth2 request.
                 if self.is_authentication:
@@ -186,7 +174,7 @@ class AuthorizeEndpoint(object):
                     }
                     # Include at_hash when access_token is being returned.
                     if 'access_token' in query_fragment:
-                        kwargs['at_hash'] = token.at_hash
+                        kwargs['at_hash'] = at_hash
                     id_token_dic = create_id_token(**kwargs)
 
                     # Check if response_type must include id_token in the response.
@@ -210,7 +198,7 @@ class AuthorizeEndpoint(object):
 
                 # Code parameter must be present if it's Hybrid Flow.
                 if self.grant_type == 'hybrid':
-                    query_fragment['code'] = code.code
+                    query_fragment['code'] = code_token
 
                 query_fragment['token_type'] = 'bearer'
 

@@ -5,23 +5,12 @@ from base64 import urlsafe_b64encode
 
 from django.contrib.auth import authenticate
 from django.http import JsonResponse
-
 from oidc_provider import settings
-from oidc_provider.lib.errors import (
-    TokenError,
-    UserAuthError,
-)
+from oidc_provider.lib.errors import TokenError, UserAuthError
 from oidc_provider.lib.utils.oauth2 import extract_client_auth
-from oidc_provider.lib.utils.token import (
-    create_id_token,
-    create_token,
-    encode_id_token,
-)
-from oidc_provider.models import (
-    Client,
-    Code,
-    Token,
-)
+from oidc_provider.lib.utils.token import (create_id_token, create_token,
+                                           encode_id_token)
+from oidc_provider.models import Client, Code, Token
 from oidc_provider.signals import token_created
 
 logger = logging.getLogger(__name__)
@@ -42,10 +31,14 @@ class TokenEndpoint(object):
         self.params['client_secret'] = client_secret
         self.params['redirect_uri'] = self.request.POST.get('redirect_uri', '')
         self.params['grant_type'] = self.request.POST.get('grant_type', '')
-        self.params['code'] = self.request.POST.get('code', '')
+        code = self.request.POST.get('code', '')
+        self.params['code'] = Code.hash_token(code) if code != '' else ''
         self.params['state'] = self.request.POST.get('state', '')
         self.params['scope'] = self.request.POST.get('scope', '')
-        self.params['refresh_token'] = self.request.POST.get('refresh_token', '')
+        refresh_token = self.request.POST.get('refresh_token', '')
+        self.params["refresh_token"] = (
+            Token.hash_token(refresh_token) if refresh_token != '' else ''
+        )
         # PKCE parameter.
         self.params['code_verifier'] = self.request.POST.get('code_verifier')
 
@@ -178,7 +171,7 @@ class TokenEndpoint(object):
     def create_code_response_dic(self):
         # See https://tools.ietf.org/html/rfc6749#section-4.1
 
-        token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=self.code.user,
             client=self.code.client,
             scope=self.code.scope)
@@ -189,7 +182,7 @@ class TokenEndpoint(object):
                 aud=self.client.client_id,
                 token=token,
                 nonce=self.code.nonce,
-                at_hash=token.at_hash,
+                at_hash=at_hash,
                 request=self.request,
                 scope=token.scope,
             )
@@ -214,8 +207,8 @@ class TokenEndpoint(object):
         self.code.delete()
 
         dic = {
-            'access_token': token.access_token,
-            'refresh_token': token.refresh_token,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'token_type': 'bearer',
             'expires_in': settings.get('OIDC_TOKEN_EXPIRE'),
             'id_token': encode_id_token(id_token_dic, token.client),
@@ -232,7 +225,7 @@ class TokenEndpoint(object):
         if unauthorized_scopes:
             raise TokenError('invalid_scope')
 
-        token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=self.token.user,
             client=self.token.client,
             scope=scope)
@@ -244,7 +237,7 @@ class TokenEndpoint(object):
                 aud=self.client.client_id,
                 token=token,
                 nonce=None,
-                at_hash=token.at_hash,
+                at_hash=at_hash,
                 request=self.request,
                 scope=token.scope,
             )
@@ -268,8 +261,8 @@ class TokenEndpoint(object):
         self.token.delete()
 
         dic = {
-            'access_token': token.access_token,
-            'refresh_token': token.refresh_token,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'token_type': 'bearer',
             'expires_in': settings.get('OIDC_TOKEN_EXPIRE'),
             'id_token': encode_id_token(id_token_dic, self.token.client),
@@ -280,7 +273,7 @@ class TokenEndpoint(object):
     def create_access_token_response_dic(self):
         # See https://tools.ietf.org/html/rfc6749#section-4.3
         token_scopes = self.validate_requested_scopes()
-        token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             self.user,
             self.client,
             token_scopes)
@@ -290,7 +283,7 @@ class TokenEndpoint(object):
             user=self.user,
             aud=self.client.client_id,
             nonce='self.code.nonce',
-            at_hash=token.at_hash,
+            at_hash=at_hash,
             request=self.request,
             scope=token.scope,
         )
@@ -307,8 +300,8 @@ class TokenEndpoint(object):
         )
 
         return {
-            'access_token': token.access_token,
-            'refresh_token': token.refresh_token,
+            'access_token': access_token,
+            'refresh_token': refresh_token,
             'expires_in': settings.get('OIDC_TOKEN_EXPIRE'),
             'token_type': 'bearer',
             'id_token': encode_id_token(id_token_dic, token.client),
@@ -319,7 +312,7 @@ class TokenEndpoint(object):
         # See https://tools.ietf.org/html/rfc6749#section-4.4.3
         token_scopes = self.validate_requested_scopes()
 
-        token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=None,
             client=self.client,
             scope=token_scopes)
@@ -335,7 +328,7 @@ class TokenEndpoint(object):
         )
 
         return {
-            'access_token': token.access_token,
+            'access_token': access_token,
             'expires_in': settings.get('OIDC_TOKEN_EXPIRE'),
             'token_type': 'bearer',
             'scope': ' '.join(token.scope),

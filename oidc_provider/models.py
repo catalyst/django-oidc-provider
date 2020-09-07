@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
-import base64
-import binascii
-from operator import attrgetter
-from hashlib import md5, sha256
+import hashlib
 import json
+from hashlib import md5
+from operator import attrgetter
 from urllib.parse import urlparse
 
 from django.db import models
 from django.utils import timezone
+from django.utils.crypto import constant_time_compare
 from django.utils.translation import gettext_lazy as _
 from django.conf import settings as django_settings
 from django.core.exceptions import ValidationError
@@ -15,7 +15,6 @@ from Cryptodome.PublicKey import RSA
 
 from oidc_provider import settings
 from oidc_provider.lib.utils.storage import KeyStorage
-
 
 CLIENT_TYPE_CHOICES = [
     ('confidential', 'Confidential'),
@@ -239,6 +238,19 @@ class BaseCodeTokenModel(models.Model):
     def __unicode__(self):
         return self.__str__()
 
+    @staticmethod
+    def hash_token(token):
+        hasher = hashlib.sha256()
+        hasher.update(token.encode('ascii'))
+        return hasher.hexdigest()
+
+    @staticmethod
+    def verify_hash(received_token, existing_hash):
+        return constant_time_compare(
+            BaseCodeTokenModel.encode(received_token),
+            existing_hash
+        )
+
 
 class Code(BaseCodeTokenModel):
 
@@ -295,18 +307,6 @@ class Token(BaseCodeTokenModel):
 
     def __str__(self):
         return u'{0} - {1}'.format(self.client, self.access_token)
-
-    @property
-    def at_hash(self):
-        # @@@ d-o-p only supports 256 bits (change this if that changes)
-        hashed_access_token = sha256(
-            self.access_token.encode('ascii')
-        ).hexdigest().encode('ascii')
-        return base64.urlsafe_b64encode(
-            binascii.unhexlify(
-                hashed_access_token[:len(hashed_access_token) // 2]
-            )
-        ).rstrip(b'=').decode('ascii')
 
     def access_has_expired(self):
         return timezone.now() >= self.access_expires_at

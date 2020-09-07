@@ -1,6 +1,8 @@
-from datetime import timedelta
+import base64
+import binascii
 import time
 import uuid
+from datetime import timedelta
 
 from Cryptodome.PublicKey.RSA import importKey
 from django.utils import dateformat, timezone
@@ -8,15 +10,10 @@ from jwkest.jwk import RSAKey as jwk_RSAKey
 from jwkest.jwk import SYMKey
 from jwkest.jws import JWS
 from jwkest.jwt import JWT
-
-from oidc_provider.lib.utils.common import get_issuer, run_processing_hook
-from oidc_provider.lib.claims import StandardScopeClaims
-from oidc_provider.models import (
-    Code,
-    RSAKey,
-    Token,
-)
 from oidc_provider import settings
+from oidc_provider.lib.claims import StandardScopeClaims
+from oidc_provider.lib.utils.common import get_issuer, run_processing_hook
+from oidc_provider.models import Code, RSAKey, Token
 
 
 def create_id_token(token, user, aud, nonce='', at_hash='', request=None, scope=None):
@@ -109,17 +106,25 @@ def create_token(user, client, scope, id_token_dic=None):
     token = Token()
     token.user = user
     token.client = client
-    token.access_token = uuid.uuid4().hex
+    access_token = uuid.uuid4().hex
+    refresh_token = uuid.uuid4().hex
+    token.access_token = Token.hash_token(token=access_token)
+    token.refresh_token = Token.hash_token(token=refresh_token)
+    ascii_access_token = token.access_token.encode('ascii')
+    at_hash = base64.urlsafe_b64encode(
+        binascii.unhexlify(
+            ascii_access_token[:len(ascii_access_token) // 2]
+        )
+    ).rstrip(b'=').decode('ascii')
 
     if id_token_dic is not None:
         token.id_token = id_token_dic
 
-    token.refresh_token = uuid.uuid4().hex
     token.access_expires_at = timezone.now() + timedelta(
         seconds=settings.get('OIDC_TOKEN_EXPIRE'))
     token.scope = scope
 
-    return token
+    return access_token, refresh_token, at_hash, token
 
 
 def create_code(user, client, scope, nonce, is_authentication,
@@ -132,7 +137,8 @@ def create_code(user, client, scope, nonce, is_authentication,
     code.user = user
     code.client = client
 
-    code.code = uuid.uuid4().hex
+    code_token = uuid.uuid4().hex
+    code.code = Token.hash_token(token=code_token)
 
     if code_challenge and code_challenge_method:
         code.code_challenge = code_challenge
@@ -144,7 +150,7 @@ def create_code(user, client, scope, nonce, is_authentication,
     code.nonce = nonce
     code.is_authentication = is_authentication
 
-    return code
+    return code_token, code
 
 
 def get_client_alg_keys(client):

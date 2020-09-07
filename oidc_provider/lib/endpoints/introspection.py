@@ -1,12 +1,11 @@
 import logging
 
 from django.http import JsonResponse
-
+from oidc_provider import settings
 from oidc_provider.lib.errors import TokenIntrospectionError
 from oidc_provider.lib.utils.common import run_processing_hook
 from oidc_provider.lib.utils.oauth2 import extract_client_auth
-from oidc_provider.models import Token, Client
-from oidc_provider import settings
+from oidc_provider.models import Client, Token
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,7 @@ class TokenIntrospectionEndpoint(object):
 
     def _extract_params(self):
         # Introspection only supports POST requests
-        self.params['token'] = self.request.POST.get('token')
+        self.params['token'] = Token.hash_token(self.request.POST.get('token'))
         client_id, client_secret = extract_client_auth(self.request)
         self.params['client_id'] = client_id
         self.params['client_secret'] = client_secret

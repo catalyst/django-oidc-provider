@@ -5,21 +5,14 @@ from unittest import mock
 
 import django
 from django.contrib.auth.backends import ModelBackend
+from django.contrib.auth.models import User
+from django.utils import timezone
+from oidc_provider.models import Client, Code, ResponseType, Token, UserConsent
 
 try:
     from urlparse import parse_qs, urlsplit
 except ImportError:
     from urllib.parse import parse_qs, urlsplit
-
-from django.utils import timezone
-from django.contrib.auth.models import User
-
-from oidc_provider.models import (
-    Client,
-    Code,
-    Token,
-    ResponseType,
-    UserConsent)
 
 
 FAKE_NONCE = 'cb584e44c43ed6bd0bc2d9c7e242837d'
@@ -106,6 +99,14 @@ def create_fake_token(user, scopes, client):
     return token
 
 
+def create_fake_refresh_token(user, scopes, client):
+    refresh_token = str(random.randint(1, 999999)).zfill(6)
+    token = create_fake_token(user, scopes, client)
+    token.refresh_token = Token.hash_token(token=refresh_token)
+    token.save()
+    return refresh_token
+
+
 def is_code_valid(url, user, client):
     """
     Check if the code inside the url is valid. Supporting both query string and fragment.
@@ -113,8 +114,7 @@ def is_code_valid(url, user, client):
     try:
         parsed = urlsplit(url)
         params = parse_qs(parsed.query or parsed.fragment)
-        code = params['code'][0]
-        code = Code.objects.get(code=code)
+        code = Code.objects.get(code=Code.hash_token(params['code'][0]))
         is_code_ok = (code.client == client) and (code.user == user)
     except Exception:
         is_code_ok = False

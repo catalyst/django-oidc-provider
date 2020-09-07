@@ -1,7 +1,15 @@
 import json
-from mock import Mock
-
 from datetime import timedelta
+
+from django.test import RequestFactory, TestCase
+from django.test.utils import override_settings
+from django.utils import timezone
+from mock import Mock
+from oidc_provider.lib.utils.token import create_id_token, create_token
+from oidc_provider.tests.app.utils import (FAKE_NONCE, create_fake_client,
+                                           create_fake_user)
+from oidc_provider.views import userinfo
+
 try:
     from urllib.parse import urlencode
 except ImportError:
@@ -11,20 +19,6 @@ try:
     from django.urls import reverse
 except ImportError:
     from django.core.urlresolvers import reverse
-from django.test import RequestFactory, TestCase
-from django.test.utils import override_settings
-from django.utils import timezone
-
-from oidc_provider.lib.utils.token import (
-    create_id_token,
-    create_token,
-)
-from oidc_provider.tests.app.utils import (
-    create_fake_user,
-    create_fake_client,
-    FAKE_NONCE,
-)
-from oidc_provider.views import userinfo
 
 
 class UserInfoTestCase(TestCase):
@@ -42,7 +36,7 @@ class UserInfoTestCase(TestCase):
             extra_scope = []
         scope = ['openid', 'email'] + extra_scope
 
-        token = create_token(
+        access_token, refresh_token, at_hash, token = create_token(
             user=self.user,
             client=self.client,
             scope=scope)
@@ -58,7 +52,7 @@ class UserInfoTestCase(TestCase):
         token.id_token = id_token_dic
         token.save()
 
-        return token
+        return access_token, refresh_token, at_hash, token
 
     def _post_request(self, access_token, schema='Bearer'):
         """
@@ -77,10 +71,10 @@ class UserInfoTestCase(TestCase):
         return response
 
     def test_response_with_valid_token(self):
-        token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         # Test a valid request to the userinfo endpoint.
-        response = self._post_request(token.access_token)
+        response = self._post_request(access_token)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(bool(response.content), True)
@@ -90,21 +84,21 @@ class UserInfoTestCase(TestCase):
         Some clients expect to be able to pass the token_type value from the token endpoint
         ("bearer") back to the identity provider unchanged.
         """
-        token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
-        response = self._post_request(token.access_token, schema='bearer')
+        response = self._post_request(access_token, schema='bearer')
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(bool(response.content), True)
 
     def test_response_with_expired_access_token(self):
-        token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         # Make token expired.
         token.access_expires_at = timezone.now() - timedelta(hours=1)
         token.save()
 
-        response = self._post_request(token.access_token)
+        response = self._post_request(access_token)
 
         self.assertEqual(response.status_code, 401)
 
@@ -116,9 +110,9 @@ class UserInfoTestCase(TestCase):
 
     @override_settings(OIDC_REFRESH_TOKEN_ALIVE_HOOK=Mock(return_value=False))
     def test_response_with_expired_token(self):
-        token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
-        response = self._post_request(token.access_token)
+        response = self._post_request(access_token)
 
         self.assertEqual(response.status_code, 401)
 
@@ -129,12 +123,12 @@ class UserInfoTestCase(TestCase):
         self.assertEqual(is_header_field_ok, True)
 
     def test_response_with_invalid_scope(self):
-        token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         token.scope = ['otherone']
         token.save()
 
-        response = self._post_request(token.access_token)
+        response = self._post_request(access_token)
 
         self.assertEqual(response.status_code, 403)
 
@@ -149,10 +143,10 @@ class UserInfoTestCase(TestCase):
         Make a GET request to the UserInfo Endpoint by sending access_token
         as query string parameter.
         """
-        token = self._create_token()
+        access_token, refresh_token, at_hash, token = self._create_token()
 
         url = reverse('oidc_provider:userinfo') + '?' + urlencode({
-            'access_token': token.access_token,
+            'access_token': access_token,
         })
 
         request = self.factory.get(url)
@@ -162,8 +156,10 @@ class UserInfoTestCase(TestCase):
         self.assertEqual(bool(response.content), True)
 
     def test_user_claims_in_response(self):
-        token = self._create_token(extra_scope=['profile'])
-        response = self._post_request(token.access_token)
+        access_token, refresh_token, at_hash, token = self._create_token(
+            extra_scope=['profile']
+        )
+        response = self._post_request(access_token)
         response_dic = json.loads(response.content.decode('utf-8'))
 
         self.assertEqual(response.status_code, 200)
@@ -172,8 +168,10 @@ class UserInfoTestCase(TestCase):
         self.assertNotIn('profile', response_dic, msg='"profile" claim should not be in response.')
 
         # Now adding `address` scope.
-        token = self._create_token(extra_scope=['profile', 'address'])
-        response = self._post_request(token.access_token)
+        access_token, refresh_token, at_hash, token = self._create_token(
+            extra_scope=['profile', 'address']
+        )
+        response = self._post_request(access_token)
         response_dic = json.loads(response.content.decode('utf-8'))
 
         self.assertIn('address', response_dic, msg='"address" claim should be in response.')
